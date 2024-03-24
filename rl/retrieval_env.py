@@ -6,6 +6,21 @@ from transformers import AutoTokenizer
 from babilong_utils import TaskDataset, SentenceSampler, NoiseInjectionDataset
 from tqdm import tqdm
 
+def shuffle(noise, facts):
+    N_facts = len(facts)
+    N = len(noise) + N_facts
+    facts_ids = sorted(np.random.choice(N, size=N_facts, replace=False))
+    all = []
+    noise_i, fact_i = 0, 0
+    for i in range(N):
+        if fact_i < N_facts and i == facts_ids[fact_i]:
+            all.append(facts[fact_i])
+            fact_i += 1
+        else:
+            all.append(noise[noise_i])
+            noise_i += 1
+    return all, facts_ids
+
 class QARetrievalEnv:
     def __init__(self,
                  sample,
@@ -29,9 +44,12 @@ class QARetrievalEnv:
         self.sentences = []
 
         background_text = self.lm_tokenizer.batch_decode(sample['background_text'])
+        # print("Supporting facts:\n", sample['facts'])
+        # print("====================================")
+        #self.sentences, _ = shuffle(background_text, sample['facts'])
         self.sentences.extend(background_text)
-
         self.sentences.extend(sample['facts'])
+        #
         self.sentences = np.array(self.sentences)
         # self.facts_ids = np.arange(len(self.sentences))
 
@@ -98,6 +116,8 @@ class QARetrievalEnv:
 
         return self.rmodel.reward(self)
 
+    def close(self):
+        del self.sent_embeds
 
 class RetrievalPolicy:
     def act(self, state):

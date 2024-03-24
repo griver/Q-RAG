@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 from rl.retrieval_env import QARetrievalEnv, RetrievalPolicy, TopKPolicy
 from babilong_utils import NoiseInjectionDataset, sum_lengths
 from torch.utils.data import Dataset
@@ -15,8 +16,6 @@ from transformers import AutoTokenizer
 #
 #     def __getitem__(self, ind):
 #         pass
-
-
 class SequentialRetrievalPostprocessor(Dataset):
     def __init__(
         self,
@@ -47,20 +46,30 @@ class SequentialRetrievalPostprocessor(Dataset):
 
 
     def __len__(self):
+        #return 2
         return len(self.base_dataset)
 
     def multi_step_retrieval(self, sample):
+
         env = QARetrievalEnv(
             sample, self.retriever,
             self.retr_tokenizer,
             self.base_dataset.tokenizer,
             max_steps=self.num_retrieval_steps
         )
-
         s = env.reset()
+        # i = 0
+        # print("New sample")
+        # print(f"t={i}, state={' '.join(env.state)}")
+
         while True:
             actions = self.policy.act(s)
             s, reward, done = env.step(actions)
+
+            # print("====")
+            # i += 1
+            # print(f"t={i}, state={' '.join(env.state)}")
+
             if done:
                 break
         return list(env.state)

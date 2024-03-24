@@ -420,6 +420,8 @@ if __name__ == '__main__':
                 if '<|endoftext|>' in o:
                     # print(f"gt: {data['target_text'][i]}, generated {o}")
                     generation_outputs[i] = o.split('<|endoftext|>')[1].strip()
+                    #print("generated output:", generation_outputs[i])
+                    #print("target text:", data['target_text'][i])
 
             metrics['exact_match'] = np.mean([text == pred for text, pred in zip (data['target_text'], generation_outputs)])
 
