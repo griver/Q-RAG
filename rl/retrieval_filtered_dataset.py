@@ -1,6 +1,6 @@
 import torch
 import numpy as np
-from rl.retrieval_env import QARetrievalEnv, RetrievalPolicy, TopKPolicy
+from rl.retrieval_env import RetrievalEnv, RetrievalPolicy, TopKExhaustiveSearch
 from babilong_utils import NoiseInjectionDataset, sum_lengths
 from torch.utils.data import Dataset
 import sys
@@ -51,7 +51,7 @@ class SequentialRetrievalPostprocessor(Dataset):
 
     def multi_step_retrieval(self, sample):
 
-        env = QARetrievalEnv(
+        env = RetrievalEnv(
             sample, self.retriever,
             self.retr_tokenizer,
             self.base_dataset.tokenizer,
