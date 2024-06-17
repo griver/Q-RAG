@@ -10,6 +10,7 @@ import datasets
 from datasets import Dataset, load_dataset, load_from_disk
 import torch
 import sys
+import time
 import numpy as np
 from collections import deque
 
@@ -212,7 +213,7 @@ if __name__ == "__main__":
     policy = TopKExhaustiveSearch(1, epsilon=0.5)
     train(policy, env, replay_buffer, agent,
           batch_size=16, warmup=500, eval_every=500, gamma=0.1,
-          logdir=f"runs/{task}-t{max_steps}-sent{num_sentences}/"
+          logdir=f"runs/{task}-t{max_steps}-sent{num_sentences}/{time.strftime('%Y%m%d-%H%M')}/"
     )
     #task_dataset_train = TaskDataset(train_path,) #max_n_facts=10)
     #print("first sample:")

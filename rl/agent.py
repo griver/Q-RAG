@@ -11,6 +11,8 @@ if contriever_path not in sys.path:
 import numpy as np
 from src import contriever, dist_utils, utils
 
+
+import warnings
 import logging
 logger = logging.getLogger(__name__)
 
@@ -102,9 +104,11 @@ class RetrievalAgent(RetrievalPolicy):
 
 
         if is_states:
-            batch = self.s_tokenizer(input, padding=True, return_tensors="pt").to(self.device)
+            batch = self.s_tokenizer(input, truncation=True, padding=True, max_length=512, return_tensors="pt").to(self.device)
             T = batch.data['input_ids'].size(-1)
-            assert T < 512, f'Input is too long for Contriever T={T}!'
+            if T > 1024:
+                #assert T < 1024, f'Input is too long for Contriever T={T}!'
+                warnings.warn(f"Input (len={T}) is exceeding length 1024")
             embeds = self.s_encoder(**batch)
         else:
             with torch.no_grad():
