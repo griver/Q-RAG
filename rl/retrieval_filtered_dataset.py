@@ -4,10 +4,10 @@ from rl.retrieval_env import RetrievalEnv, RetrievalPolicy, TopKExhaustiveSearch
 from babilong_utils import NoiseInjectionDataset, sum_lengths
 from torch.utils.data import Dataset
 import sys
-contriever_path = "/home/griver/projects/ml/nlp/contriever"
-if contriever_path not in sys.path:
-    sys.path.append(contriever_path)
-from src.contriever import Contriever
+# contriever_path = "/home/griver/projects/ml/nlp/contriever"
+# if contriever_path not in sys.path:
+#     sys.path.append(contriever_path)
+# from contriever import Contriever
 from transformers import AutoTokenizer
 
 
