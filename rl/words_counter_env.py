@@ -24,7 +24,7 @@ class WordsCounterEnv:
                  block_size: int,
                  max_length: int,
                  block_embedding: nn.Module,
-                 tokenizer: PreTrainedTokenizer | PreTrainedTokenizerFast,
+                 tokenizer, #: PreTrainedTokenizer | PreTrainedTokenizerFast,
                  subset: str = "train") -> None:
         self.dataset = dataset[subset].with_format("numpy") 
         self.features = ['context', 'word', 'claim', 'label']
