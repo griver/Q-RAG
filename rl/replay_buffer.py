@@ -2,7 +2,7 @@ import numpy as np
 import torch
 
 
-class TextReplayBuffer(object):
+class ReplayBuffer(object):
 
     def __init__(self, max_size=int(1e6)):
         self.max_size = max_size

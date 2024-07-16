@@ -60,10 +60,9 @@ class BertPredictor(nn.Module):
     def get_token_type_ids(self, tensor):
         return torch.zeros_like(tensor)
     
-    def forward(self, data: Dict[str, Tensor]):
+    def forward(self, input_ids, attention_mask, *args, **kw):
         
-        #assert data["attention_mask"].dtype == torch.float32, f'attention mask dtype: {data["attention_mask"].dtype}'
-        input_ids, attention_mask, token_type_ids = self._inject_class_token(data["input_ids"], data["attention_mask"])
+        input_ids, attention_mask, token_type_ids = self._inject_class_token(input_ids, attention_mask)
 
         out = self.model.forward(
             input_ids, attention_mask, token_type_ids, return_dict=False
