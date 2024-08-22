@@ -48,6 +48,19 @@ class TextEnv:
             embeds.append(self.embedder(**subbatch).to("cpu"))
 
         return torch.cat(embeds, dim=0).numpy()
+    
+    @torch.no_grad()
+    def get_extra_embeds(self, embedder: nn.Module) -> np.ndarray:
+        batch = self.embed_tokenizer(
+            list(self.all_texts), 
+            padding=True, 
+            truncation=True, 
+            return_tensors="pt", 
+            max_length=self.max_embed_length
+        ).to(torch.device("cuda"))
+
+        return embedder(**batch)
+
 
     def reset(self, question: str, text_array: List[str]) -> TextMemory:
         self.all_texts = text_array
@@ -91,7 +104,7 @@ class TextEnv:
             )
 
         available_mask = self.memory.available_mask.copy()
-        available_mask[action] = False
+        # available_mask[action] = False
 
         self.memory = TextMemory(
             item_ids=self.memory.item_ids + [action],
@@ -136,13 +149,18 @@ class TextReplayBuffer(ReplayBuffer):
             [torch.from_numpy(si.embeds) for si in memory], 
             batch_first=True)
         
+        available_mask = pad_sequence(
+            [torch.from_numpy(si.available_mask) for si in memory], 
+            batch_first=True, padding_value=False)
+        
         s_memory = TextMemory(
             item_ids=[si.item_ids for si in memory],
             available_ids=[si.available_ids for si in memory],
-            input_ids=input_ids,
-            attention_mask=attention_mask,
+            available_mask=available_mask.cuda(),
+            input_ids=input_ids.cuda(),
+            attention_mask=attention_mask.cuda(),
             text=[si.text for si in memory],
-            embeds=embeds
+            embeds=embeds.cuda().type(torch.float32)
         )
         
         return s_memory
@@ -161,8 +179,8 @@ class TextReplayBuffer(ReplayBuffer):
         
         a_blocck = TextMemoryItem(
             index=[si.index for si in actions],
-            input_ids=input_ids,
-            attention_mask=attention_mask,
+            input_ids=input_ids.cuda(),
+            attention_mask=attention_mask.cuda(),
             text=[si.text for si in actions]
         )
         
@@ -170,10 +188,10 @@ class TextReplayBuffer(ReplayBuffer):
 
     @torch.no_grad()
     def sample(self, batch_size):
-        s, a, r, next_s, not_done = super().sample(batch_size)
+        s, a, r, next_s, not_done, entropy = super().sample(batch_size)
 
         s_stack = self.stack_memory(s)
         next_s_stack = self.stack_memory(next_s)
         a_stack = self.stack_actions(a)
         
-        return s_stack, a_stack, next_s_stack, torch.from_numpy(r), torch.from_numpy(not_done)    
+        return s_stack, a_stack, next_s_stack, torch.FloatTensor(r).cuda(), torch.FloatTensor(not_done).cuda(), torch.FloatTensor(entropy).cuda()    

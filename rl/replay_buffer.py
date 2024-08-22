@@ -13,15 +13,17 @@ class ReplayBuffer(object):
         self.action = [None,]*max_size
         self.next_state = [None,]*max_size
         self.reward = np.zeros((max_size, 1))
+        self.entropy = np.zeros((max_size, 1))
         self.not_done = np.zeros((max_size, 1))
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    def add(self, state, action, next_state, reward, done):
+    def add(self, state, action, next_state, reward, done, entropy):
         self.state[self.ptr] = state
         self.action[self.ptr] = action
         self.next_state[self.ptr] = next_state
         self.reward[self.ptr] = reward
-        self.not_done[self.ptr] = 1. - done
+        self.entropy[self.ptr] = entropy
+        self.not_done[self.ptr] = 1. - int(done)
         self.ptr = (self.ptr + 1) % self.max_size
         self.size = min(self.size + 1, self.max_size)
 
@@ -45,7 +47,8 @@ class ReplayBuffer(object):
         next_s = [self.next_state[i] for i in ind]
         r = self.reward[ind]
         not_done = self.not_done[ind]
-        return s, a, r, next_s, not_done
+        entropy = self.entropy[ind]
+        return s, a, r, next_s, not_done, entropy
 
     # def normalize_states(self, eps=1e-3):
     #     mean = self.state.mean(0, keepdims=True)
