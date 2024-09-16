@@ -1,7 +1,7 @@
 import sys
 import os
 
-from rl.sarsa import SARSA, SARSAArgs
+from rl.dqn import DQN, DQNArgs
 from rl.words_counter_env import WordsCounterEnv
 
 
@@ -52,9 +52,9 @@ action_embed_target = BertPredictor(bert_model, 6, tokenizer, 768, 256, 1).cuda(
 state_embed = BertPredictor(bert_model, 6, tokenizer, 768, 256, 1).cuda()
 state_embed_target = BertPredictor(bert_model, 6, tokenizer, 768, 256, 1).cuda()
 
-agent = SARSA(
+agent = DQN(
     state_embed, action_embed, state_embed_target, action_embed_target, 
-    SARSAArgs(gamma=0.99, tau=0.01,  lr=5e-5, max_steps=(100_000 // 4) * max_steps)
+    DQNArgs(gamma=0.99, tau=0.01,  lr=5e-5, max_steps=(100_000 // 4) * max_steps)
 )
 
 env = WordsCounterEnv(

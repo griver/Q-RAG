@@ -10,16 +10,16 @@ from .text_env import TextMemory, TextMemoryItem
 import copy
 
 
-SARSAArgs = namedtuple("SARSAArgs", ["gamma", "tau", "lr", "max_steps"])
+DQNArgs = namedtuple("DQNArgs", ["gamma", "tau", "lr", "max_steps"])
 
 
-class SARSA(object):
+class DQN(object):
     def __init__(self, 
                  state_embed: nn.Module,
                  action_embed: nn.Module,
                  state_embed_target: nn.Module,
                  action_embed_target: nn.Module,
-                 args: SARSAArgs):
+                 args: DQNArgs):
 
         self.gamma = args.gamma
         self.tau = args.tau

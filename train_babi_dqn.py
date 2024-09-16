@@ -1,9 +1,6 @@
 import sys
 import os
 
-from rl.sarsa import SARSA, SARSAArgs
-
-
 repo_dir = os.path.dirname(os.path.abspath("./"))
 if repo_dir not in sys.path:
     print(f'add repository dir: {repo_dir}')
@@ -18,12 +15,12 @@ import datasets
 from datasets import Dataset, load_dataset, load_from_disk
 import torch
 import sys
+from rl.dqn import DQN, DQNArgs
 import time
 import numpy as np
 from collections import deque
 from rl.babilong_env import BabilongEnv
 from rl.sacd import SAC, SACArgs
-# from rl.sarsa import SARSA, SARSAArgs
 from rl.text_env import TextReplayBuffer
 from transformers import AutoModel, AutoTokenizer
 from rl.bert_predictor import BertPredictor
@@ -73,9 +70,9 @@ action_embed_target = BertPredictor(bert_model, 6, tokenizer, 768, 256, 1).cuda(
 state_embed = BertPredictor(bert_model, 6, tokenizer, 768, 256, 1).cuda()
 state_embed_target = BertPredictor(bert_model, 6, tokenizer, 768, 256, 1).cuda()
 
-agent = SARSA(
+agent = DQN(
     state_embed, action_embed, state_embed_target, action_embed_target, 
-    SARSAArgs(gamma=0.99, tau=0.01,  lr=5e-5, max_steps=(20_000 // 4) * max_steps)
+    DQNArgs(gamma=0.99, tau=0.01,  lr=5e-5, max_steps=(20_000 // 4) * max_steps)
 )
 
 
