@@ -20,8 +20,8 @@ class TextEnv:
     separator = " [SEP] "
     embedder: nn.Module
     embed_tokenizer: Union[PreTrainedTokenizer, PreTrainedTokenizerFast]
-    max_embed_length = 512
-    max_batch_size = 256
+    max_embed_length = 500
+    max_batch_size = 128
 
     def tokenize(self, text: str) -> np.ndarray:
         tokens = self.embed_tokenizer(text, truncation=True, max_length=self.max_embed_length)
@@ -42,6 +42,7 @@ class TextEnv:
         ).to(torch.device("cuda"))
         
         B = batch["input_ids"].shape[0]
+        assert batch["input_ids"].shape[1] <= 500
         embeds = []
         for i in range(0, B, self.max_batch_size):
             subbatch = {k:v[i:i+self.max_batch_size] for k, v in batch.items()}
@@ -90,7 +91,10 @@ class TextEnv:
         is_empty = len(self.memory.text) == 0
 
         new_text = action_text if is_empty else self.memory.text + self.separator + action_text
-        # tokens = self.tokenize(new_text)
+        tokens = self.tokenize(new_text)
+
+        # input_ids = tokens["input_ids"]
+        # attention_mask = tokens["attention_mask"]
 
         if is_empty: 
             input_ids = action_tokens["input_ids"].copy()
@@ -104,15 +108,15 @@ class TextEnv:
             )
 
         available_mask = self.memory.available_mask.copy()
-        # available_mask[action] = False
+        available_mask[action] = False
 
         self.memory = TextMemory(
             item_ids=self.memory.item_ids + [action],
             available_ids=self.memory.available_ids - {action},
             available_mask=available_mask,
             text=new_text,
-            input_ids=input_ids,
-            attention_mask=attention_mask,
+            input_ids=input_ids[:self.max_embed_length],
+            attention_mask=attention_mask[:self.max_embed_length],
             embeds=self.memory.embeds
         )
 

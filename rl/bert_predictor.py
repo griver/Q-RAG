@@ -21,7 +21,7 @@ class BertPredictor(nn.Module):
         config = deepcopy(bert.config)
         config.num_hidden_layers = num_hidden_layers
 
-        self.model = RobertaModel(config)
+        self.model = AutoModel.from_config(config)
 
         self.model.embeddings.load_state_dict({k: v.clone() for k, v in bert.embeddings.state_dict().items()})
         for i in range(config.num_hidden_layers):
@@ -30,19 +30,20 @@ class BertPredictor(nn.Module):
         self.model.train()
 
         vocab_size: int = self.model.embeddings.word_embeddings.weight.shape[0]
-        extended_vocab_size = vocab_size + self.n_output
-        self.register_buffer('output_token_ids', torch.arange(vocab_size, extended_vocab_size))
-        self.model.resize_token_embeddings(extended_vocab_size)
+        if self.n_output > 1:
+            extended_vocab_size = vocab_size + self.n_output
+            self.register_buffer('output_token_ids', torch.arange(vocab_size, extended_vocab_size))
+            self.model.resize_token_embeddings(extended_vocab_size)
 
     def _inject_class_token(self, input_ids: Tensor, attention_mask: Tensor):
         input_ids = input_ids.clone()
         input_ids[(input_ids == self.sep_token_id) | (input_ids == self.cls_token_id) | (attention_mask < 1e-5)] = self.pad_token_id
         
         prefix_1 = self.cls_token[None, :].repeat(input_ids.shape[0], 1)
-        prefix_2 = self.output_token_ids[None, :].repeat(input_ids.shape[0], 1)
-        prefix_3 = self.sep_token[None, :].repeat(input_ids.shape[0], 1)
 
         if self.n_output > 1:
+            prefix_2 = self.output_token_ids[None, :].repeat(input_ids.shape[0], 1)
+            prefix_3 = self.sep_token[None, :].repeat(input_ids.shape[0], 1)
             input_ids = torch.cat([prefix_1, prefix_2, prefix_3, input_ids], dim=1)
         else:
             input_ids = torch.cat([prefix_1, input_ids], dim=1)
@@ -62,15 +63,19 @@ class BertPredictor(nn.Module):
     
     def forward(self, input_ids, attention_mask, *args, **kw):
         
-        input_ids, attention_mask, token_type_ids = self._inject_class_token(input_ids, attention_mask)
+        # input_ids, attention_mask, token_type_ids = self._inject_class_token(input_ids, attention_mask)
 
+        assert input_ids.shape[1] <= 512
+        assert attention_mask.shape[1] == input_ids.shape[1]
+ 
         out = self.model.forward(
-            input_ids, attention_mask, token_type_ids, return_dict=False
+            input_ids, attention_mask, return_dict=False
         )[0]
 
         if self.n_output > 1:
             prediction  = out[:, 1: self.n_output + 1]
         else:
-            prediction  = out[:, 0]
+            mask = attention_mask.reshape(out.shape[0], out.shape[1], 1)
+            prediction  = (out * mask).sum(1) / mask.sum(1)
 
-        return self.head(prediction)
+        return prediction / 10

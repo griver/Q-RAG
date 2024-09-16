@@ -68,7 +68,6 @@ class TaskDataset(Dataset):
     
     def __len__(self):
         return self.fact_dataset.sample_num.max()
-    
 
 
 def sum_lengths(sentences):

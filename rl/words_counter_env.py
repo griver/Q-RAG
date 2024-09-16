@@ -58,7 +58,9 @@ class WordsCounterEnv(TextEnv):
         self.decoded_blocks = [
             self.tokenizer.decode(self.blocks["input_ids"][i]) for i in range(self.T // self.block_size)  
         ]
-        self.word_positions = [i for i, b in enumerate(self.decoded_blocks) if word in b.replace(f'\'{word}\'', '')]
+        self.word_positions = [
+            i for i, b in enumerate(self.decoded_blocks) if  word.lower() in [wi.strip() for wi in b.replace(f'\'{word}\'', '').lower().split(" ")]
+        ]
 
         question = claim if self.add_question else ""
 

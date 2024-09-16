@@ -9,11 +9,12 @@ def logsumexp(inputs: Tensor, attention_mask: Tensor, dim=None, keepdim=False):
     if dim is None:
         inputs = inputs.view(-1)
         dim = 0
-    inputs_copy = inputs.clone()
-    inputs_copy[attention_mask == False] = torch.min(inputs_copy) - 1
 
-    s, _ = torch.max(inputs_copy, dim=dim, keepdim=True)
-    s_o = inputs - s
+    assert attention_mask.shape == inputs.shape
+   
+    s, _ = torch.max(inputs, dim=dim, keepdim=True)
+    s_o = torch.clamp(inputs - s, -100, 1)
+    assert s_o.max() < 1e-8
     outputs = s + (s_o.exp() * attention_mask.type(torch.int32)).sum(dim=dim, keepdim=True).log()
 
     if not keepdim:
@@ -39,8 +40,14 @@ class TextQNet(nn.Module):
     def forward(self, s: TextMemory, a: TextMemoryItem): 
         s_embed = self.state_embed(input_ids=s.input_ids, attention_mask=s.attention_mask)
         a_embed = self.action_embed(input_ids=a.input_ids, attention_mask=a.attention_mask)
-        logits = (s_embed * a_embed).sum(-1) 
-        return logits
+        
+        D = s_embed.shape[-1] // 2
+        logits_1 = (s_embed[:, :D] * a_embed[:, :D]).sum(-1) 
+        logits_2 = (s_embed[:, D:] * a_embed[:, D:]).sum(-1) 
+
+        return logits_1, logits_2
+
+        # return (s_embed * a_embed).sum(-1) 
 
 
 class ActionEmbedTarget(nn.Module):
@@ -88,13 +95,13 @@ class TextQNetPolicy(nn.Module):
         s_embed = self.state_embed(input_ids=input_ids, attention_mask=attention_mask)
         s_embed = s_embed[:, None, :]
         
-        logits = (s_embed * a_embeds).sum(-1) 
+        logits = (s_embed * a_embeds).sum(-1) / 2
         logits[mask == False] = logits.min() - 1
 
         if alpha < 1e-8:
-            return torch.argmax(logits, -1)
+            return torch.argmax(logits, -1), torch.tensor([0]), torch.tensor([0])
 
-        probs = (logits / alpha).softmax(-1)
+        probs = ((logits - logits.max()) / alpha).softmax(-1)
         probs[mask == False] = 0
         dist = torch.distributions.Categorical(probs = probs)
         action = dist.sample()
@@ -142,6 +149,46 @@ class TextVNet(nn.Module):
         s_embed = s_embed[:, None, :]
         a_embeds: Tensor = s.embeds
         
-        logits = (s_embed * a_embeds).sum(-1) 
+        # logits = (s_embed * a_embeds).sum(-1) 
+        D = s_embed.shape[-1] // 2
+        logits_1 = (s_embed[:, :, :D] * a_embeds[:, :, :D]).sum(-1) 
+        logits_2 = (s_embed[:, :, D:] * a_embeds[:, :, D:]).sum(-1) 
+        v1 = alpha * logsumexp(logits_1 / alpha, attention_mask=s.available_mask, dim=-1)
+        v2 = alpha * logsumexp(logits_2 / alpha, attention_mask=s.available_mask, dim=-1)
+    
+        return v1, v2
 
-        return alpha * logsumexp(logits / alpha, attention_mask=s.available_mask, dim=-1)
+
+
+class TextMaxQNet(nn.Module):
+
+    state_embed: nn.Module
+
+    def __init__(self, state_embed: nn.Module, q_net: TextQNet) -> None:
+        super().__init__()
+        self.state_embed = state_embed
+        self.state_embed.load_state_dict({
+            k: v.clone() for k, v in q_net.state_embed.state_dict().items()
+        })
+
+
+    @torch.no_grad()
+    def update(self, q_net: TextQNet, decay: float = 0.01):
+        soft_update(self.state_embed, q_net.state_embed, decay)
+
+    @torch.no_grad()
+    def forward(self, s: TextMemory):
+
+        s_embed = self.state_embed(input_ids=s.input_ids, attention_mask=s.attention_mask)
+        s_embed = s_embed[:, None, :]
+        a_embeds: Tensor = s.embeds
+        
+        D = s_embed.shape[-1] // 2
+        logits_1 = (s_embed[:, :, :D] * a_embeds[:, :, :D]).sum(-1) 
+        logits_2 = (s_embed[:, :, D:] * a_embeds[:, :, D:]).sum(-1) 
+
+        logits_1[s.available_mask == False] = torch.min(logits_1)
+        logits_2[s.available_mask == False] = torch.min(logits_2)
+
+        return logits_1.max(-1).values, logits_2.max(-1).values
+
