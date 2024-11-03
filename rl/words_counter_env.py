@@ -8,6 +8,19 @@ from collections import namedtuple
 from typing import Tuple, Dict, List, Any, Union
 from rl.text_env import TextEnv
 
+def isSubArray_v2(A, B):
+    
+    A = np.array(A)
+    B = np.array(B)
+    
+    n, m = len(A), len(B)
+    
+    if m > n:
+        return False
+    
+    windows = np.lib.stride_tricks.sliding_window_view(A, m)
+    return np.any(np.all(windows == B, axis=1))
+
 
 class WordsCounterEnv(TextEnv):
     def __init__(self, 
@@ -58,8 +71,11 @@ class WordsCounterEnv(TextEnv):
         self.decoded_blocks = [
             self.tokenizer.decode(self.blocks["input_ids"][i]) for i in range(self.T // self.block_size)  
         ]
+
+        word_tokens = self.tokenizer(word, max_length=self.max_length)["input_ids"][1:-1]
+
         self.word_positions = [
-            i for i, b in enumerate(self.decoded_blocks) if  word.lower() in [wi.strip() for wi in b.replace(f'\'{word}\'', '').lower().split(" ")]
+            i for i, b in enumerate(self.blocks["input_ids"]) if  isSubArray_v2(b, word_tokens)
         ]
 
         question = claim if self.add_question else ""

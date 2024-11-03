@@ -1,9 +1,8 @@
 import numpy as np
-from torch import nn, Tensor
-import torch
 from collections import namedtuple
 from typing import Tuple, Dict, List, Any, Union
 import torch.utils
+# from rl.jax_text_env import TextEnv, TextMemory, TextMemoryItem
 from rl.text_env import TextEnv, TextMemory, TextMemoryItem
 from transformers import PreTrainedTokenizer, PreTrainedTokenizerFast
 
@@ -28,7 +27,7 @@ class GroundTruthReward:
 class BabilongEnv(TextEnv):
 
     def __init__(self,
-                 embedder: nn.Module,
+                 embedder,
                  embed_tokenizer: Union[PreTrainedTokenizer, PreTrainedTokenizerFast],
                  dataset,
                  max_steps = 3,

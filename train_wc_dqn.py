@@ -39,7 +39,7 @@ os.environ['TOKENIZERS_PARALLELISM'] = 'true'
 print("loading dataset: AIRI-NLP/quality_counter_new_1024")
 dataset = load_dataset("AIRI-NLP/quality_counter_new_1024")
 
-writer = SummaryWriter(comment="DQN_" + "AIRI-NLP/quality_counter_new_1024")
+writer = SummaryWriter(comment="DQN_" + "AIRI-NLP/quality_counter_1024")
 
 bert_name = "facebook/contriever"
 tokenizer = AutoTokenizer.from_pretrained(bert_name, use_fast=True, revision="main")
@@ -59,7 +59,7 @@ agent = DQN(
 
 env = WordsCounterEnv(
     dataset, 
-    block_size=16, 
+    block_size=32, 
     embedder=agent.action_embed_target, 
     max_length=1024, 
     embed_tokenizer=tokenizer, 
@@ -70,7 +70,7 @@ env = WordsCounterEnv(
 
 env_test = WordsCounterEnv(
     dataset, 
-    block_size=16, 
+    block_size=32, 
     embedder=agent.action_embed_target, 
     max_length=1024, 
     embed_tokenizer=tokenizer, 
@@ -127,7 +127,7 @@ for ep_number in tqdm(range(100_000)):
         a_all.append(action)
         
         if step > learning_start and step % 4 == 0:
-            s_batch, a_batch, next_s_batch, r_batch, not_done_batch, entropy_batch = buffer.sample(32)
+            s_batch, a_batch, next_s_batch, r_batch, not_done_batch, entropy_batch = buffer.sample(16)
             qf_loss = agent.update(s_batch, a_batch, next_s_batch, r_batch, not_done_batch, step)
             writer.add_scalar("qf_loss", qf_loss, step)
     

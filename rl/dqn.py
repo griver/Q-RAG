@@ -25,7 +25,7 @@ class DQN(object):
         self.tau = args.tau
 
         self.critic = TextQNet(state_embed, action_embed).cuda()
-        self.critic_optim = AdamW(self.critic.parameters(), lr=args.lr, betas=(0.9, 0.98), weight_decay = 0.001, eps=1e-6)
+        self.critic_optim = AdamW(self.critic.parameters(), lr=args.lr, betas=(0.9, 0.98), weight_decay = 0.01, eps=1e-6)
         self.sheduler = optim.lr_scheduler.CosineAnnealingLR(self.critic_optim, args.max_steps, args.lr * 1e-2)
 
         self.v_net_target = TextMaxQNet(state_embed_target, self.critic)
@@ -38,7 +38,8 @@ class DQN(object):
         if random:
             action, logp, entropy = self.random_policy.forward(state)
         else:
-            action, logp, entropy = self.policy(state, a_embeds, 0.0)
+            alpha = 0.0 if evaluate else 0.01
+            action, logp, entropy = self.policy(state, a_embeds, alpha)
         
         return action.squeeze().item()
 

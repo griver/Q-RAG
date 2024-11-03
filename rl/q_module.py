@@ -36,6 +36,8 @@ class TextQNet(nn.Module):
         super().__init__()
         self.state_embed = state_embed
         self.action_embed = action_embed
+        self.weight = nn.Parameter(torch.ones(1))
+        self.bias = nn.Parameter(torch.zeros(1))
 
     def forward(self, s: TextMemory, a: TextMemoryItem): 
         s_embed = self.state_embed(input_ids=s.input_ids, attention_mask=s.attention_mask)
@@ -44,6 +46,9 @@ class TextQNet(nn.Module):
         D = s_embed.shape[-1] // 2
         logits_1 = (s_embed[:, :D] * a_embed[:, :D]).sum(-1) 
         logits_2 = (s_embed[:, D:] * a_embed[:, D:]).sum(-1) 
+
+        logits_1 = logits_1 * self.weight + self.bias
+        logits_2 = logits_2 * self.weight + self.bias
 
         return logits_1, logits_2
 
@@ -72,12 +77,13 @@ class ActionEmbedTarget(nn.Module):
 class TextQNetPolicy(nn.Module):
     state_embed: nn.Module
 
-    def __init__(self, state_embed: nn.Module, q_net: TextQNet) -> None:
+    def __init__(self, state_embed: nn.Module, q_net: TextQNet, top_k_actions=5) -> None:
         super().__init__()
         self.state_embed = state_embed
         self.state_embed.load_state_dict({
             k: v.clone() for k, v in q_net.state_embed.state_dict().items()
         })
+        self.top_k_actions = top_k_actions
 
     @torch.no_grad()
     def update(self, q_net: TextQNet):
@@ -98,11 +104,15 @@ class TextQNetPolicy(nn.Module):
         logits = (s_embed * a_embeds).sum(-1) / 2
         logits[mask == False] = logits.min() - 1
 
+        top_ids = torch.topk(logits, self.top_k_actions, dim=1).indices
+        top_mask = torch.zeros_like(logits > 0).scatter_(1, top_ids, True)
+
         if alpha < 1e-8:
             return torch.argmax(logits, -1), torch.tensor([0]), torch.tensor([0])
 
         probs = ((logits - logits.max()) / alpha).softmax(-1)
-        probs[mask == False] = 0
+        probs[(mask & top_mask) == False] = 0
+        probs = probs / probs.sum(-1)
         dist = torch.distributions.Categorical(probs = probs)
         action = dist.sample()
 
@@ -171,10 +181,15 @@ class TextMaxQNet(nn.Module):
             k: v.clone() for k, v in q_net.state_embed.state_dict().items()
         })
 
+        self.weight = nn.Parameter(torch.ones(1)).cuda()
+        self.bias = nn.Parameter(torch.zeros(1)).cuda()
+
 
     @torch.no_grad()
     def update(self, q_net: TextQNet, decay: float = 0.01):
         soft_update(self.state_embed, q_net.state_embed, decay)
+        self.weight.data = self.weight.data * (1 - decay) + q_net.weight.data * decay
+        self.bias.data = self.bias.data * (1 - decay) + q_net.bias.data * decay
 
     @torch.no_grad()
     def forward(self, s: TextMemory):
@@ -190,5 +205,6 @@ class TextMaxQNet(nn.Module):
         logits_1[s.available_mask == False] = torch.min(logits_1)
         logits_2[s.available_mask == False] = torch.min(logits_2)
 
-        return logits_1.max(-1).values, logits_2.max(-1).values
+        return (logits_1.max(-1).values * self.weight + self.bias, 
+                logits_2.max(-1).values * self.weight + self.bias)
 
