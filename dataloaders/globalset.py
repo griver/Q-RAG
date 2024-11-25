@@ -105,7 +105,7 @@ class GlobalSet(Dataset):
                     qa += 1
                 if task.type == "summary":
                     summ += 1
-                weight += sys.getsizeof(task)
+                weight += sys.getsizeof(task.context)
 
             total_qa += qa
             total_summ += summ
