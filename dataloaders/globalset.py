@@ -110,7 +110,7 @@ class GlobalSet(Dataset):
             total_qa += qa
             total_summ += summ
             total_weight += weight
-            total_avg = (total_avg * (total_samples - len(dataset)) + np.sum(context_lengths)) / total_samples
+            total_avg = int((total_avg * (total_samples - len(dataset)) + np.sum(context_lengths)) / total_samples)
             total_max = max(total_max, np.max(context_lengths))
             total_min = min(total_min, np.min(context_lengths))
 
