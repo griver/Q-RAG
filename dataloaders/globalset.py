@@ -2,27 +2,33 @@ import sys
 import torch
 import numpy as np
 from torch.utils.data import Dataset
+from os.path import join as join_path
 
-from localsets.musique import LocalSetMusique
-from localsets.infbench import LocalSetInfinity
-from localsets.longbench import LocalSetLongbench
-from localsets.loogle import LocalSetLoogle
-from localsets.novelqa import LocalSetNovelQA
+from dataloaders.localsets.musique import LocalSetMusique
+from dataloaders.localsets.infbench import LocalSetInfinity
+from dataloaders.localsets.longbench import LocalSetLongbench
+from dataloaders.localsets.loogle import LocalSetLoogle
+from dataloaders.localsets.novelqa import LocalSetNovelQA
+from dataloaders.localsets.babilong import LocalSetBabilong
 
 DATASETS = {
     "musique": LocalSetMusique,
     "inf": LocalSetInfinity, 
     "longb": LocalSetLongbench, 
     "loogle": LocalSetLoogle, 
-    "novel": LocalSetNovelQA, 
+    "novel": LocalSetNovelQA,
+    'babilong': LocalSetBabilong
 }
 
+DATA_PATH = "data_sources/"
+
 PATHS = {
-    "musique": "../data_sources/musique",
-    "inf": "../data_sources/inf_bench", 
-    "longb": "../data_sources/longbench/data", 
-    "loogle": "../data_sources/loogle", 
-    "novel": "../data_sources/NovelQA", 
+    "musique": join_path(DATA_PATH, "musique"),
+    "inf": join_path(DATA_PATH, "inf_bench"),
+    "longb": join_path(DATA_PATH, "longbench/data"),
+    "loogle": join_path(DATA_PATH, "loogle"),
+    "novel": join_path(DATA_PATH, "NovelQA"),
+    'babilong': join_path(DATA_PATH, "babilong")
 }
 
 class SplittedSet(Dataset):
@@ -40,31 +46,71 @@ class SplittedSet(Dataset):
         task = self.datasets[dataset_idx].__getitem__(self.map[dataset_idx])
         self.map[dataset_idx] = (self.map[dataset_idx] + 1) % len(self.datasets[dataset_idx])
         return task
-    
+
+
+
+def create_datasets(
+    dataset_names, tokenizer,
+    lengths=-1,
+    min_context_len=-1,
+    max_context_len=1e7,
+    type="qa",
+    anno_type="real",
+    seed=52,
+):
+    if isinstance(lengths, int):
+        lengths = [lengths] * len(dataset_names)
+    datasets  = []
+    for i, name in enumerate(dataset_names):
+        if name in ["musique", "inf", "longb", "loogle"]:
+            ds = DATASETS[name](
+                path=PATHS[name], tokenizer=tokenizer, length=lengths[i],
+                min_context_len=min_context_len, max_context_len=max_context_len,
+                type=type, anno_type=anno_type, seed=seed
+            )
+        datasets.append(ds)
+    return datasets
+
+
 
 class GlobalSet(Dataset):
-    def __init__(self, datasets, tokenizer, split_strategy, proportions = 1, lengths = -1, min_context_len = -1, max_context_len = 1e7, type = "qa", anno_type = "real", seed = 52):
-        super().__init__()
-        if isinstance(lengths, int):
-            lengths = [lengths] * len(datasets)
+
+
+    def __init__(self, datasets, split_strategy, proportions = 1):
         if not isinstance(proportions, list):
             proportions = [proportions] * len(datasets)
-        self.datasets = [
-            DATASETS[dataset](
-                path = PATHS[dataset], tokenizer = tokenizer, length = length, 
-                min_context_len = min_context_len, max_context_len = max_context_len,
-                type = type, anno_type = anno_type, seed = seed
-            ) for dataset, length in zip(datasets, lengths)
-        ]
-        self.datasets_names = datasets
+        self.datasets = datasets
+        self.datasets_names = [d.name() for d in self.datasets]
 
         self.split_strategy = split_strategy
         self.order = []
         for i, dataset in enumerate(self.datasets):
             self.order += [i] * int(len(dataset) * proportions[i])
         self.order = np.random.permutation(self.order)
-
         self.map = {i: 0 for i in range(len(self.datasets))}
+
+    # def __init__(self, datasets, tokenizer, split_strategy, proportions = 1, lengths = -1, min_context_len = -1, max_context_len = 1e7, type = "qa", anno_type = "real", seed = 52):
+    #     super().__init__()
+    #     if isinstance(lengths, int):
+    #         lengths = [lengths] * len(datasets)
+    #     if not isinstance(proportions, list):
+    #         proportions = [proportions] * len(datasets)
+    #     self.datasets = [
+    #         DATASETS[dataset](
+    #             path = PATHS[dataset], tokenizer = tokenizer, length = length,
+    #             min_context_len = min_context_len, max_context_len = max_context_len,
+    #             type = type, anno_type = anno_type, seed = seed
+    #         ) for dataset, length in zip(datasets, lengths)
+    #     ]
+    #     self.datasets_names = datasets
+    #
+    #     self.split_strategy = split_strategy
+    #     self.order = []
+    #     for i, dataset in enumerate(self.datasets):
+    #         self.order += [i] * int(len(dataset) * proportions[i])
+    #     self.order = np.random.permutation(self.order)
+    #
+    #     self.map = {i: 0 for i in range(len(self.datasets))}
 
     def __len__(self):
         return len(self.order)

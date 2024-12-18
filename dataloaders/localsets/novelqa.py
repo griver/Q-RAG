@@ -5,7 +5,7 @@ import numpy as np
 from tqdm.auto import tqdm
 from torch.utils.data import Dataset
 
-from utils import Task
+from ..utils import Task
 
 class LocalSetNovelQA(Dataset):
     def __init__(self, path, tokenizer, length = -1, min_context_len = -1, max_context_len = 1e7, type = "qa", anno_type = "real", seed = 52):
@@ -19,6 +19,9 @@ class LocalSetNovelQA(Dataset):
 
         np.random.seed(seed)
         self._load_data(path)
+
+    def name(self):
+        return 'novel'
 
     def _load_data(self, path):
         print("WARNING! NovelQA hasn't ground truth answers")

@@ -4,7 +4,7 @@ import numpy as np
 from tqdm.auto import tqdm
 from torch.utils.data import Dataset
 
-from utils import Task
+from ..utils import Task
 
 PARTITIONS = {
     # "code_debug": 
@@ -43,6 +43,9 @@ class LocalSetInfinity(Dataset):
 
         np.random.seed(seed)
         self._load_data(path)
+
+    def name(self):
+        return 'inf'
 
     def _load_data(self, path):
         self.tasks = []
