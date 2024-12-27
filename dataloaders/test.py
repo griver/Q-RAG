@@ -26,15 +26,17 @@ if __name__=="__main__":
             type=type, anno_type=anno_type, seed=seed
         )
 
-    datasets = [create_simple(n) for n in ["musique", "novel",]]
+    datasets = [create_simple(n) for n in
+                ["musique"]#, "novel",]
+    ]
 
-    datasets.append(
-        LocalSetBabilong.create(
-            PATHS['babilong'], 'qa2', tokenizer,
-            min_context_len=min_gen_context, max_context_len=max_gen_context,
-            seed=seed
-        )
-    )
+    # datasets.append(
+    #     LocalSetBabilong.create(
+    #         PATHS['babilong'], 'qa2', tokenizer,
+    #         min_context_len=min_gen_context, max_context_len=max_gen_context,
+    #         seed=seed
+    #     )
+    # )
     new_set = GlobalSet(datasets, split_strategy="80:20")
 
     train_set, test_set = new_set.get_train_test_split()

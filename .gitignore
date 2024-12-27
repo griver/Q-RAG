@@ -168,4 +168,7 @@ dmypy.json
 cython_debug/
 
 .vscode/
+
+#folders for logged experiments:
 runs/
+output/

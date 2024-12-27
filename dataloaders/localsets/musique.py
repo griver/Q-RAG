@@ -45,7 +45,9 @@ class LocalSetMusique(Dataset):
             context_len = len(self.tokenizer(context)["input_ids"])
             if context_len > self.max_context_len or context_len < self.min_context_len:
                 continue
-            self.tasks.append(Task("qa", "real", context_len, context, task["answer"], task["question"], "MuSiQue", partition))
+            self.tasks.append(Task(
+                    "qa", "real", context_len, context, task["answer"], task["question"], "MuSiQue", partition,
+            ))
 
         self.tasks = np.random.permutation(self.tasks)
         if self.length >= 0:
@@ -57,5 +59,7 @@ class LocalSetMusique(Dataset):
     def __getitem__(self, idx):
         return self.tasks[idx]
 
-    
+
+class RetrievalMusique(Dataset):
+    pass
     
