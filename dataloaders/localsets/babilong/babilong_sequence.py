@@ -180,7 +180,7 @@ class SentenceSampler:
 # combined dataset for noisy babi QA
 # it's recommended to use sample_size >= 1024
 # and task_end_pct - task_start_pct >= 0.2 in order to
-class BabilongDataset(Dataset):
+class BabiLong(Dataset):
 
 
     @classmethod
@@ -305,7 +305,7 @@ class BabilongDataset(Dataset):
         return self.task_dataset.get_partition_name()
 
 
-class LocalSetBabilong(BabilongDataset):
+class LocalSetBabilong(BabiLong):
 
     def name(self):
         return 'babilong'

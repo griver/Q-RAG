@@ -1,5 +1,5 @@
-data_sources
-
+data_sources/
+notebooks/
 # *e_exp
 # *_exp.*
 # */exp/*

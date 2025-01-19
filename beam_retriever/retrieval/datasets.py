@@ -88,10 +88,69 @@ class BeamRetrieverQADataset(Dataset):
     def __len__(self):
         return len(self.data)
 
-class BeamRetrieverAdapter(Dataset):
+class BeamRetrieverQAAdapter(GlobalSet):
 
-    def __init__(self, tokenizer, datasets, max_len=512):
-        pass
+    def __init__(
+            self, datasets, tokenizer, split_strategy, proportions=1, max_chunk_len=512
+    ):
+        super().__init__(datasets, split_strategy, proportions)
+        self.max_chunk_len = max_chunk_len
+        self.max_passages_num = 25
+        self.tokenizer = tokenizer
+        print(f"Total sample count {sum(len(d) for d in datasets)}")
+
+    def __getitem__(self, index):
+        dataset_idx = self.order[index]
+        curr_dataset = self.datasets[dataset_idx]
+        dataset_name  = curr_dataset.name()
+        sample_id = self.map[dataset_idx]
+        sample = curr_dataset.__getitem__(sample_id)
+        self.map[dataset_idx] = (self.map[dataset_idx] + 1) % len(curr_dataset)
+        #sample = self.data[index]
+
+        question = sample['question']
+        if question.endswith("?"):
+            question = question[:-1]
+        q_codes = self.tokenizer.encode(question, add_special_tokens=False, return_tensors="pt", truncation=True, max_length=self.max_chunk_len).squeeze(0)
+        sp_title_set = set()
+        c_codes = []
+        sf_idx = []
+        if dataset_name == 'musique':
+            # musique
+            id = sample['id']
+            for i, para in enumerate(sample['paragraphs']):
+                # if para['is_supporting']:
+                #     sf_idx.append(i)
+                l = para['title'] + '. ' + para['paragraph_text']
+                encoding = self.tokenizer.encode(l, add_special_tokens=False, return_tensors="pt", truncation=True, max_length=self.max_chunk_len - q_codes.shape[-1]).squeeze(0)
+                c_codes.append(encoding)
+            # label order
+            for item_json in sample['question_decomposition']:
+                sf_idx.append(item_json['paragraph_support_idx'])
+        elif dataset_name == "babilong":
+            id = sample_id
+
+            for i, sent in enumerate(sample['chunks']):
+                encoding = self.tokenizer.encode(sent, add_special_tokens=False, return_tensors="pt", truncation=True,
+                                      max_length=self.max_chunk_len - q_codes.shape[-1]).squeeze(0)
+                c_codes.append(encoding)
+            for i in sample['references_idx']:
+                sf_idx.append(i)
+
+        else:
+            raise ValueError('Unknown dataset!')
+
+        res = {
+            'q_codes': q_codes,
+            'c_codes': c_codes,
+            'sf_idx': sf_idx,
+            'id': id,
+        }
+        return res
+
+    # def __len__(self):
+    #     return len(self.data)
+
 
 def collate_fn(samples):
     if len(samples) == 0:

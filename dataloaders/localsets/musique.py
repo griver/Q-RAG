@@ -43,6 +43,7 @@ class LocalSetMusique(Dataset):
                 paragraph_text = text["paragraph_text"]
                 context += f"TITLE: {title}\nTEXT: {paragraph_text}\n\n"
             context_len = len(self.tokenizer(context)["input_ids"])
+
             if context_len > self.max_context_len or context_len < self.min_context_len:
                 continue
             self.tasks.append(Task(
@@ -53,6 +54,7 @@ class LocalSetMusique(Dataset):
         if self.length >= 0:
             self.tasks = self.tasks[:self.length]
 
+
     def __len__(self):
         return len(self.tasks)
 
@@ -60,6 +62,47 @@ class LocalSetMusique(Dataset):
         return self.tasks[idx]
 
 
-class RetrievalMusique(Dataset):
-    pass
-    
+class RetrievalMusique(LocalSetMusique):
+    """A default version of Musique Dataset. """
+
+    def __init__(self, path, tokenizer, length=-1, min_context_len=-1, max_context_len=1e7,
+                 type="qa", anno_type="real", split='train', seed=52):
+        self.split = split #possible values: 'eval', 'train', 'all'
+        super().__init__(path, tokenizer, length, min_context_len, max_context_len, type, anno_type, seed)
+
+    def _load_data(self, path):
+        self.tasks = []
+
+        if self.type not in ["qa", "any"] or self.anno_type not in ["real", "any"]:
+            return
+
+        raw_tasks = []
+        if self.split in ['eval', 'all']:
+            with open(path + '/musique_ans_v1.0_dev.jsonl', 'r') as json_file:
+                json_list = list(json_file)
+                raw_tasks.extend( [(json.loads(json_str), "dev") for json_str in json_list] )
+
+        if self.split in ['train', 'all']:
+            with open(path + '/musique_ans_v1.0_train.jsonl', 'r') as json_file:
+                json_list = list(json_file)
+                raw_tasks.extend( [(json.loads(json_str), "train") for json_str in json_list] )
+
+        for sample, partition in tqdm(raw_tasks, "MuSiQue load"):
+            context = ""
+            for text in sample["paragraphs"]:
+                title = text["title"]
+                paragraph_text = text["paragraph_text"]
+                context += f"TITLE: {title}\nTEXT: {paragraph_text}\n\n"
+            context_len = len(self.tokenizer(context)["input_ids"])
+
+            if self.min_context_len <= context_len <= self.max_context_len:
+                self.tasks.append(self._adapt_raw_sample(sample))
+
+        self.tasks = np.random.permutation(self.tasks)
+        if self.length >= 0:
+            self.tasks = self.tasks[:self.length]
+
+    def _adapt_raw_sample(self, sample):
+        """Adapt sample to unified format expected by the model"""
+        return sample
+
