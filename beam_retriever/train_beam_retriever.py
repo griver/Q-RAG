@@ -1,5 +1,7 @@
 import logging
 import os
+import sys
+sys.path.append(os.getcwd()) #fix for importing error
 import random
 from datetime import date
 import json
@@ -23,6 +25,7 @@ from dataloaders.localsets.babilong import RetrievalBabilong
 from dataloaders.localsets.musique import RetrievalMusique
 from dataloaders.globalset import PATHS
 import argparse
+
 
 def create_dataset(datasets_names, tokenizer, task, max_chunk_len=512, num_chunks=50, seed=52, split='train'):
 
