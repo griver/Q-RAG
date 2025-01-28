@@ -27,7 +27,7 @@ if __name__=="__main__":
         )
 
     datasets = [create_simple(n) for n in
-                ["musique"]#, "novel",]
+                ["hotpot"]#, "novel",]
     ]
 
     # datasets.append(

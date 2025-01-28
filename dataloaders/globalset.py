@@ -17,7 +17,7 @@ DATASETS = {
     "longb": LocalSetLongbench, 
     "loogle": LocalSetLoogle, 
     "novel": LocalSetNovelQA,
-    'babilong': LocalSetBabilong
+    'babilong': LocalSetBabilong,
 }
 
 DATA_PATH = "data_sources/"
@@ -28,7 +28,8 @@ PATHS = {
     "longb": join_path(DATA_PATH, "longbench/data"),
     "loogle": join_path(DATA_PATH, "loogle"),
     "novel": join_path(DATA_PATH, "NovelQA"),
-    'babilong': join_path(DATA_PATH, "babilong")
+    'babilong': join_path(DATA_PATH, "babilong"),
+    'hotpotqa': join_path(DATA_PATH, 'hotpotqa')
 }
 
 class SplittedSet(Dataset):

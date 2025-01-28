@@ -18,10 +18,11 @@ from transformers import (AutoConfig, AutoTokenizer, AutoModel,
 
 from retrieval.retriever_model import Retriever
 from retrieval.datasets import BeamRetrieverQADataset, collate_fn, BeamRetrieverQAAdapter
-from utils.utils import load_saved, move_to_cuda, AverageMeter
+from beam_retriever.utils.utils import load_saved, move_to_cuda, AverageMeter
 #from retrieval.config import train_args
 from sklearn.metrics import f1_score
 from dataloaders.localsets.babilong import RetrievalBabilong
+from dataloaders.localsets.hotpotqa import RetrievalHotPotQA
 from dataloaders.localsets.musique import RetrievalMusique
 from dataloaders.globalset import PATHS
 import argparse
@@ -35,17 +36,19 @@ def create_dataset(datasets_names, tokenizer, task, max_chunk_len=512, num_chunk
             d = RetrievalMusique(path=PATHS['musique'], tokenizer=tokenizer, length=-1,
                                    min_context_len=0, max_context_len=1e7,
                                    type='any', anno_type='any', split=split, seed=seed)
-            datasets.append(d)
-
+        elif name == 'hotpotqa':
+            d = RetrievalHotPotQA(path=PATHS['hotpotqa'], tokenizer=tokenizer, length=-1,
+                                  min_context_len=0, max_context_len=1e7, seed=seed, split=split)
         elif name == "babilong":
             bl_split = 'test' if split == 'eval' else split #Babi dataset doesn't have eval split
             d = RetrievalBabilong.create(
                 path='data_sources/babilong/', task=task, num_chunks=num_chunks,
                 noise_data_path='pg19-with-sentences/', seed=seed, split=bl_split
             )
-            datasets.append(d)
         else:
             raise ValueError(f'{name} is not adapted to Beam Retriever.')
+
+        datasets.append(d)
 
     dataset = BeamRetrieverQAAdapter(datasets, tokenizer, "80:20", max_chunk_len=max_chunk_len)
 
@@ -255,7 +258,7 @@ def main():
         #train_dataset = BeamRetrieverQADataset(tokenizer, args.train_file, args.max_seq_len, type=args.dataset_type)
         train_dataset = create_dataset(args.dataset, tokenizer, "qa2",
             num_chunks=num_chunks, seed=args.seed, split='train')
-        print(f'TRAIN SIZE: {len(eval_dataset)}')
+        print(f'TRAIN SIZE: {len(train_dataset)}')
 
         if args.local_rank != -1:
             train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
@@ -418,6 +421,29 @@ def predict(tokenizer, model, eval_dataloader, logger, args):
     logger.info(f"performance: em: {em}, f1: {f1}")
     model.train()
     return {'em':em, 'f1': f1, 'pred_list': pred_list}
+
+
+def predict_2(tokenizer, model, eval_dataloader, logger, args):
+    model.eval()
+    logger.info("begin evaluation")
+    em_tot, f1_tot = [], []
+    pred_list = {}
+    for i, batch in enumerate(tqdm(eval_dataloader)):
+        id = batch.pop('id')
+        batch = move_to_cuda(batch)
+        with torch.no_grad():
+            current_preds = model(**batch)['current_preds']
+        pred_list[id[0]] = current_preds[0]
+        f1, em = calculate_em_f1(current_preds[0], batch['sf_idx'][0])
+        em_tot.append(em)
+        f1_tot.append(f1)
+
+    em = sum(em_tot) / len(em_tot)
+    f1 = sum(f1_tot) / len(f1_tot)
+    logger.info(f"evaluated {len(eval_dataloader)} examples...")
+    logger.info(f"performance: em: {em}, f1: {f1}")
+    model.train()
+    return {'em': em, 'f1': f1, 'pred_list': pred_list}
 
 
 if __name__ == "__main__":

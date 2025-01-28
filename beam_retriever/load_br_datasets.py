@@ -1,7 +1,9 @@
 from dataloaders.localsets.babilong import RetrievalBabilong
 from dataloaders.globalset import GlobalSet, DATASETS, PATHS
 from dataloaders.localsets.musique import RetrievalMusique
+from dataloaders.localsets.hotpotqa import RetrievalHotPotQA
 from beam_retriever.retrieval.datasets import BeamRetrieverQAAdapter
+
 from transformers import AutoTokenizer
 
 import json
@@ -24,23 +26,27 @@ if __name__=="__main__":
     proportions="80:20"
 
     #create_simple = lambda name:
-    musique = RetrievalMusique(path=PATHS['musique'], tokenizer=tokenizer, length=-1,
-            min_context_len=min_context_filter, max_context_len=max_contex_filter,
-            type=type, anno_type=anno_type, seed=seed
-    )
-    babilong = RetrievalBabilong.create(
-        path='data_sources/babilong/', task='qa2', num_chunks=100,
-        noise_data_path='pg19-with-sentences/', seed=42
-    )
+    hotpotqa = RetrievalHotPotQA(path=PATHS['hotpotqa'], tokenizer=tokenizer, length=-1,
+                               min_context_len=min_context_filter, max_context_len=max_contex_filter,
+                               type=type, anno_type=anno_type, seed=seed, split='eval'
+                               )
+    # musique = RetrievalMusique(path=PATHS['musique'], tokenizer=tokenizer, length=-1,
+    #         min_context_len=min_context_filter, max_context_len=max_contex_filter,
+    #         type=type, anno_type=anno_type, seed=seed
+    # )
+    # babilong = RetrievalBabilong.create(
+    #     path='data_sources/babilong/', task='qa2', num_chunks=100,
+    #     noise_data_path='pg19-with-sentences/', seed=42
+    # )
 
     dataset = BeamRetrieverQAAdapter(
-        [babilong,],
+        [hotpotqa,],
         tokenizer, "80:20",
     )
-    #train_set = dataset
+    train_set = dataset
     #new_set = GlobalSet(datasets, split_strategy="80:20")
 
-    train_set, test_set = dataset.get_train_test_split()
+    #train_set, test_set = dataset.get_train_test_split()
     #new_set.print_statistics() #two much time to wait for generated trajectories
 
     for i, sample in enumerate(train_set):

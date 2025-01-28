@@ -33,16 +33,16 @@ class BeamRetrieverQADataset(Dataset):
         sp_title_set = set()
         c_codes = []
         sf_idx = []
-        # if self.type == 'hotpot':
-        #     id = sample['_id']
-        #     for sup in sample['supporting_facts']:
-        #         sp_title_set.add(sup[0])
-        #     for idx, (title, sentences) in enumerate(sample['context']):
-        #         if title in sp_title_set:
-        #             sf_idx.append(idx)
-        #         l = title + "".join(sentences)
-        #         encoding = self.tokenizer.encode(l, add_special_tokens=False, return_tensors="pt", truncation=True, max_length=self.max_len-q_codes.shape[-1]).squeeze(0)
-        #         c_codes.append(encoding)
+        if self.type == 'hotpot':
+            id = sample['_id']
+            for sup in sample['supporting_facts']:
+                sp_title_set.add(sup[0])
+            for idx, (title, sentences) in enumerate(sample['context']):
+                if title in sp_title_set:
+                    sf_idx.append(idx)
+                l = title + "".join(sentences)
+                encoding = self.tokenizer.encode(l, add_special_tokens=False, return_tensors="pt", truncation=True, max_length=self.max_len-q_codes.shape[-1]).squeeze(0)
+                c_codes.append(encoding)
         if self.type == 'musique':
             # musique
             id = sample['id']
@@ -127,9 +127,20 @@ class BeamRetrieverQAAdapter(GlobalSet):
             # label order
             for item_json in sample['question_decomposition']:
                 sf_idx.append(item_json['paragraph_support_idx'])
+
+        elif dataset_name == 'hotpotqa':
+            id = sample['_id']
+            for sup in sample['supporting_facts']:
+                sp_title_set.add(sup[0])
+            for idx, (title, sentences) in enumerate(sample['context']):
+                if title in sp_title_set:
+                    sf_idx.append(idx)
+                l = title + "".join(sentences)
+                encoding = self.tokenizer.encode(l, add_special_tokens=False, return_tensors="pt", truncation=True, max_length=self.max_chunk_len-q_codes.shape[-1]).squeeze(0)
+                c_codes.append(encoding)
+
         elif dataset_name == "babilong":
             id = sample_id
-
             for i, sent in enumerate(sample['chunks']):
                 encoding = self.tokenizer.encode(sent, add_special_tokens=False, return_tensors="pt", truncation=True,
                                       max_length=self.max_chunk_len - q_codes.shape[-1]).squeeze(0)
