@@ -88,6 +88,7 @@ class BeamRetrieverQADataset(Dataset):
     def __len__(self):
         return len(self.data)
 
+
 class BeamRetrieverQAAdapter(GlobalSet):
 
     def __init__(
@@ -156,6 +157,7 @@ class BeamRetrieverQAAdapter(GlobalSet):
             'c_codes': c_codes,
             'sf_idx': sf_idx,
             'id': id,
+            #'answer': sample['answer']
         }
         return res
 
@@ -171,6 +173,7 @@ def collate_fn(samples):
         'c_codes': [s['c_codes'] for s in samples],
         "sf_idx": [s['sf_idx'] for s in samples],
         "id": [s['id'] for s in samples],
+        #'answer': [s['answer'] for s in samples]
     }
     return batch
 

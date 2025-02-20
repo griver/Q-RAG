@@ -129,7 +129,7 @@ def train_args():
 
 def main():
     args = train_args()
-    num_chunks = 50
+    num_chunks = 500
     use_label_order = True # works only with babilong-qa2 and musique
 
     transformers.logging.set_verbosity_error()
@@ -199,7 +199,7 @@ def main():
                       gradient_checkpointing=args.gradient_checkpointing, use_label_order=use_label_order)
 
 
-    eval_dataset = create_dataset(args.dataset, tokenizer, "qa2", num_chunks=num_chunks, seed=args.seed,split='eval')
+    eval_dataset = create_dataset(args.dataset, tokenizer, "qa2", num_chunks=num_chunks, seed=args.seed, split='eval')
     print(f'EVAL SIZE: {len(eval_dataset)}')
     # eval_dataset = BeamRetrieverQADataset(
     #     tokenizer, args.predict_file, args.max_seq_len, type=args.dataset_type
@@ -404,9 +404,12 @@ def predict(tokenizer, model, eval_dataloader, logger, args):
     model.eval()
     logger.info("begin evaluation")
     em_tot, f1_tot = [], []
+    mean_len = []
     pred_list = {}
     for i, batch in enumerate(tqdm(eval_dataloader)):
         id = batch.pop('id')
+
+        mean_len.append(sum(len(c) for c in batch['c_codes'][0]) + len(batch['q_codes'][0]))
         batch = move_to_cuda(batch)
         with torch.no_grad():
             current_preds = model(**batch)['current_preds']
@@ -414,11 +417,15 @@ def predict(tokenizer, model, eval_dataloader, logger, args):
         f1, em = calculate_em_f1(current_preds[0], batch['sf_idx'][0])
         em_tot.append(em)
         f1_tot.append(f1)
-        
+
+        if i >= 100:
+            break
+
     em = sum(em_tot) / len(em_tot)
     f1 = sum(f1_tot) / len(f1_tot)
     logger.info(f"evaluated {len(eval_dataloader)} examples...")
     logger.info(f"performance: em: {em}, f1: {f1}")
+    logger.info(f'mean length: {np.mean(mean_len)}')
     model.train()
     return {'em':em, 'f1': f1, 'pred_list': pred_list}
 
