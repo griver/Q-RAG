@@ -48,9 +48,11 @@ class Retriever(nn.Module):
                  use_negative_sampling=False,
                  use_focal=False,
                  use_early_stop=True,
+                 max_eval_batch=100,
                  ):
         super().__init__()
         self.encoder = encoder_class.from_pretrained(model_name, config=config)
+        self.max_eval_batch = max_eval_batch
         self.config = config
         self.max_seq_len = max_seq_len
         self.mean_passage_len = mean_passage_len # deprecated
@@ -138,7 +140,14 @@ class Retriever(nn.Module):
                             if i in sf_idx:
                                 hop1_label[i] = 1 
                     next_question_ids.append(this_question_ids)
-                hop1_encoder_outputs = self.encoder(input_ids=hop1_qp_ids, attention_mask=hop1_qp_attention_mask)[0][:, 0, :] # [doc_num, hidden_size]
+
+                if self.training:
+                    hop1_encoder_outputs = self.encoder(input_ids=hop1_qp_ids, attention_mask=hop1_qp_attention_mask)[0][:, 0, :] # [doc_num, hidden_size]
+                else:
+                    hop1_encoder_outputs = self.batched_encode(
+                        input_ids=hop1_qp_ids, attention_mask=hop1_qp_attention_mask, max_encoder_batch=self.max_eval_batch
+                    )
+
                 if self.training and self.gradient_checkpointing:
                     hop1_projection = torch.utils.checkpoint.checkpoint(self.hop_classifier_layer, hop1_encoder_outputs) # [doc_num, 2]
                 else:
@@ -243,7 +252,12 @@ class Retriever(nn.Module):
                         vec_idx += 1
 
                 assert len(pred_mapping) == hop_qp_ids.shape[0]
-                hop_encoder_outputs = self.encoder(input_ids=hop_qp_ids, attention_mask=hop_qp_attention_mask)[0][:, 0, :] # [vec_num, hidden_size]
+                if self.training:
+                    hop_encoder_outputs = self.encoder(input_ids=hop_qp_ids, attention_mask=hop_qp_attention_mask)[0][:, 0, :] # [vec_num, hidden_size]
+                else:
+                    hop_encoder_outputs = self.batched_encode(
+                        input_ids=hop_qp_ids, attention_mask=hop_qp_attention_mask, max_encoder_batch=self.max_eval_batch
+                    )
                 # if idx == 1:
                 #     hop_projection_func = self.hop2_classifier_layer
                 # elif idx == 2:
@@ -269,6 +283,20 @@ class Retriever(nn.Module):
                'loss': total_loss}
         return res
 
+    @torch.no_grad()
+    def batched_encode(self, input_ids, attention_mask, max_encoder_batch=100):
+        if max_encoder_batch is None:
+            max_encoder_batch = self.max_eval_batch
+        outputs = []
+        num_inputs = len(input_ids)
+        for i in range(0, num_inputs, max_encoder_batch):
+            ids_i = input_ids[i:i+max_encoder_batch]
+            mask_i = attention_mask[i:i+max_encoder_batch]
+            outputs_i = self.encoder(input_ids=ids_i, attention_mask=mask_i)[0][:,0,:]  # [vec_num, hidden_size]
+            outputs.append(outputs_i)
+
+        hop_encoder_outputs = torch.cat(outputs, dim=0)
+        return hop_encoder_outputs
 
 
 class SingleHopRetriever(nn.Module):

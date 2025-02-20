@@ -123,13 +123,16 @@ def train_args():
     parser.add_argument("--stop-drop", default=0, type=float)
     parser.add_argument("--use-adam", action="store_true")
     parser.add_argument("--warmup-ratio", default=0, type=float, help="Linear warmup over warmup_steps.")
+    parser.add_argument('--max_eval_batch', default=100, type=int, help='If eval batch is too big split it into chunks of length max_eval_batch')
+    parser.add_argument('--num_eval_samples', default=-1, type=int, help='maximum number of samples per evaluation')
+    parser.add_argument('--num_chunks', default=50, type=int, help='used only for synthetic datasets where you can control number of samples')
     return parser.parse_args()
 
 
 
 def main():
     args = train_args()
-    num_chunks = 500
+    num_chunks = args.num_chunks
     use_label_order = True # works only with babilong-qa2 and musique
 
     transformers.logging.set_verbosity_error()
@@ -196,7 +199,8 @@ def main():
         bert_config.flash_attention_type = args.flash_attention_type
     model = Retriever(bert_config, args.model_name, AutoModel,
                       max_seq_len=args.max_seq_len,mean_passage_len=args.mean_passage_len, beam_size=args.beam_size, use_negative_sampling=args.use_negative_sampling,
-                      gradient_checkpointing=args.gradient_checkpointing, use_label_order=use_label_order)
+                      gradient_checkpointing=args.gradient_checkpointing, use_label_order=use_label_order,
+                      max_eval_batch=args.max_eval_batch)
 
 
     eval_dataset = create_dataset(args.dataset, tokenizer, "qa2", num_chunks=num_chunks, seed=args.seed, split='eval')
@@ -418,7 +422,7 @@ def predict(tokenizer, model, eval_dataloader, logger, args):
         em_tot.append(em)
         f1_tot.append(f1)
 
-        if i >= 100:
+        if i >= args.num_eval_samples:
             break
 
     em = sum(em_tot) / len(em_tot)
