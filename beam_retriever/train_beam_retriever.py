@@ -133,7 +133,7 @@ def train_args():
 def main():
     args = train_args()
     num_chunks = args.num_chunks
-    use_label_order = True # works only with babilong-qa2 and musique
+    use_label_order = all([d in ['babilong', 'musique'] for d in args.dataset])  # works only with babilong-qa2 and musique
 
     transformers.logging.set_verbosity_error()
     if args.fp16:
@@ -198,7 +198,7 @@ def main():
         bert_config.use_memorry_efficient_attention = True
         bert_config.flash_attention_type = args.flash_attention_type
     model = Retriever(bert_config, args.model_name, AutoModel,
-                      max_seq_len=args.max_seq_len,mean_passage_len=args.mean_passage_len, beam_size=args.beam_size, use_negative_sampling=args.use_negative_sampling,
+                      max_seq_len=args.max_seq_len, mean_passage_len=args.mean_passage_len, beam_size=args.beam_size, use_negative_sampling=args.use_negative_sampling,
                       gradient_checkpointing=args.gradient_checkpointing, use_label_order=use_label_order,
                       max_eval_batch=args.max_eval_batch)
 
@@ -422,7 +422,7 @@ def predict(tokenizer, model, eval_dataloader, logger, args):
         em_tot.append(em)
         f1_tot.append(f1)
 
-        if i >= args.num_eval_samples:
+        if (args.num_eval_samples >= 0) and (i >= args.num_eval_samples):
             break
 
     em = sum(em_tot) / len(em_tot)
