@@ -32,6 +32,7 @@ class BabilongEnv(TextEnv):
                  dataset,
                  max_steps = 3,
                  max_embed_length = 500,
+                 action_embed_length = 64,
                  reward_model = GroundTruthReward()):
         
         super().__init__()
@@ -39,6 +40,7 @@ class BabilongEnv(TextEnv):
         self.dataset = dataset
         self.max_steps = max_steps
         self.max_embed_length = max_embed_length
+        self.action_embed_length = action_embed_length
 
         self.embedder = embedder
         self.embed_tokenizer = embed_tokenizer

@@ -5,17 +5,14 @@ from .text_env import TextMemory, TextMemoryItem
 import copy
 
 
-def logsumexp(inputs: Tensor, attention_mask: Tensor, dim=None, keepdim=False):
-    if dim is None:
-        inputs = inputs.view(-1)
-        dim = 0
-
-    assert attention_mask.shape == inputs.shape
-   
+def logsumexp(inputs: Tensor, attention_mask: Tensor, dim=1, keepdim=False):
+    
     s, _ = torch.max(inputs, dim=dim, keepdim=True)
-    s_o = torch.clamp(inputs - s, -100, 1)
-    assert s_o.max() < 1e-8
-    outputs = s + (s_o.exp() * attention_mask.type(torch.int32)).sum(dim=dim, keepdim=True).log()
+    
+    s_o = inputs - s
+    exp_x = torch.exp(s_o) * attention_mask.to(inputs.dtype)
+
+    outputs = s + torch.log(exp_x.sum(dim=dim, keepdim=True).clamp(min=1e-10))
 
     if not keepdim:
         outputs = outputs.squeeze(dim)
@@ -26,8 +23,11 @@ def soft_update(target, source, tau):
         target_param.data.copy_(target_param.data * (1.0 - tau) + param.data * tau)
 
 def hard_update(target, source):
-    for target_param, param in zip(target.parameters(), source.parameters()):
-        target_param.data.copy_(param.data)
+    target.load_state_dict({
+            k: v.clone() for k, v in source.state_dict().items()
+    })
+    # for target_param, param in zip(target.parameters(), source.parameters()):
+    #     target_param.data.copy_(param.data)
 
 
 class TextQNet(nn.Module):
@@ -36,8 +36,8 @@ class TextQNet(nn.Module):
         super().__init__()
         self.state_embed = state_embed
         self.action_embed = action_embed
-        self.weight = nn.Parameter(torch.ones(1))
-        self.bias = nn.Parameter(torch.zeros(1))
+        # self.weight = nn.Parameter(torch.ones(1))
+        # self.bias = nn.Parameter(torch.zeros(1))
 
     def forward(self, s: TextMemory, a: TextMemoryItem): 
         s_embed = self.state_embed(input_ids=s.input_ids, attention_mask=s.attention_mask)
@@ -47,8 +47,8 @@ class TextQNet(nn.Module):
         logits_1 = (s_embed[:, :D] * a_embed[:, :D]).sum(-1) 
         logits_2 = (s_embed[:, D:] * a_embed[:, D:]).sum(-1) 
 
-        logits_1 = logits_1 * self.weight + self.bias
-        logits_2 = logits_2 * self.weight + self.bias
+        # logits_1 = logits_1 * self.weight + self.bias
+        # logits_2 = logits_2 * self.weight + self.bias
 
         return logits_1, logits_2
 
@@ -90,28 +90,25 @@ class TextQNetPolicy(nn.Module):
         hard_update(self.state_embed, q_net.state_embed)
 
     @torch.no_grad()
-    def forward(self, s: TextMemory, a_embeds: Tensor, alpha: float):
-        assert alpha > -1e-8
+    def forward(self, s: TextMemory, a_embeds: Tensor, alpha: float, return_arg_max=False):
+        # assert alpha > -1e-8
+        
+        a_embeds = a_embeds.unsqueeze(0)
 
-        input_ids = torch.from_numpy(s.input_ids).cuda()[None,]
-        attention_mask = torch.from_numpy(s.attention_mask).cuda()[None,]
-        mask = torch.from_numpy(s.available_mask).cuda()[None,]
-        a_embeds = a_embeds[None,]
-
-        s_embed = self.state_embed(input_ids=input_ids, attention_mask=attention_mask)
-        s_embed = s_embed[:, None, :]
+        s_embed = self.state_embed(input_ids=s.input_ids, attention_mask=s.attention_mask)
+        s_embed = s_embed.unsqueeze(1)
         
         logits = (s_embed * a_embeds).sum(-1) / 2
-        logits[mask == False] = logits.min() - 1
+        logits[s.available_mask == False] = logits.min() - 1
 
         top_ids = torch.topk(logits, self.top_k_actions, dim=1).indices
         top_mask = torch.zeros_like(logits > 0).scatter_(1, top_ids, True)
 
-        if alpha < 1e-8:
+        if return_arg_max:
             return torch.argmax(logits, -1), torch.tensor([0]), torch.tensor([0])
 
         probs = ((logits - logits.max()) / alpha).softmax(-1)
-        probs[(mask & top_mask) == False] = 0
+        probs[(s.available_mask & top_mask) == False] = 0
         probs = probs / probs.sum(-1)
         dist = torch.distributions.Categorical(probs = probs)
         action = dist.sample()
@@ -139,12 +136,13 @@ class TextVNet(nn.Module):
 
     state_embed: nn.Module
 
-    def __init__(self, state_embed: nn.Module, q_net: TextQNet) -> None:
+    def __init__(self, state_embed: nn.Module, q_net: TextQNet, top_k_actions=5) -> None:
         super().__init__()
         self.state_embed = state_embed
         self.state_embed.load_state_dict({
             k: v.clone() for k, v in q_net.state_embed.state_dict().items()
         })
+        self.top_k_actions = top_k_actions
 
 
     @torch.no_grad()
@@ -153,21 +151,27 @@ class TextVNet(nn.Module):
 
     @torch.no_grad()
     def forward(self, s: TextMemory, alpha: float):
-        assert alpha > 1e-8
+        # assert alpha > 1e-8
 
         s_embed = self.state_embed(input_ids=s.input_ids, attention_mask=s.attention_mask)
-        s_embed = s_embed[:, None, :]
+        s_embed = s_embed.unsqueeze(1)
         a_embeds: Tensor = s.embeds
         
         # logits = (s_embed * a_embeds).sum(-1) 
         D = s_embed.shape[-1] // 2
         logits_1 = (s_embed[:, :, :D] * a_embeds[:, :, :D]).sum(-1) 
         logits_2 = (s_embed[:, :, D:] * a_embeds[:, :, D:]).sum(-1) 
-        v1 = alpha * logsumexp(logits_1 / alpha, attention_mask=s.available_mask, dim=-1)
-        v2 = alpha * logsumexp(logits_2 / alpha, attention_mask=s.available_mask, dim=-1)
+
+        top_ids_1 = torch.topk(logits_1, self.top_k_actions, dim=1).indices
+        top_mask_1 = torch.zeros_like(logits_1 > 0).scatter_(1, top_ids_1, True)
+
+        top_ids_2 = torch.topk(logits_2, self.top_k_actions, dim=1).indices
+        top_mask_2 = torch.zeros_like(logits_2 > 0).scatter_(1, top_ids_2, True)
+
+        v1 = alpha * logsumexp(logits_1 / alpha, attention_mask=s.available_mask & top_mask_1, dim=-1)
+        v2 = alpha * logsumexp(logits_2 / alpha, attention_mask=s.available_mask & top_mask_2, dim=-1)
     
         return v1, v2
-
 
 
 class TextMaxQNet(nn.Module):
@@ -205,6 +209,6 @@ class TextMaxQNet(nn.Module):
         logits_1[s.available_mask == False] = torch.min(logits_1)
         logits_2[s.available_mask == False] = torch.min(logits_2)
 
-        return (logits_1.max(-1).values * self.weight + self.bias, 
-                logits_2.max(-1).values * self.weight + self.bias)
+        return (logits_1.max(-1).values, 
+                logits_2.max(-1).values)
 

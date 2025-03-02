@@ -80,7 +80,7 @@ class FlaxDQN:
 
         critic = TextQNet(flax_model)
         sheduler = optax.cosine_decay_schedule(args.lr, args.max_steps, alpha=args.lr * 1e-2)
-        critic_optim = optax.adamw(learning_rate=sheduler, b1=0.9, b2=0.97, weight_decay=0.001, eps=1e-6)
+        critic_optim = optax.adamw(learning_rate=sheduler, b1=0.9, b2=0.98, weight_decay=0.01, eps=1e-6)
 
         graph, model_params, model_stats = nnx.split(critic, nnx.Param, ...)
         self.q_state = TrainState.create(graph, params=model_params, other_variables=model_stats, tx=critic_optim)

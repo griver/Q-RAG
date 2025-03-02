@@ -29,7 +29,8 @@ from tqdm import tqdm
 import torch
 
 
-# torch.set_default_device('cuda:1')
+torch.set_default_device('cuda:0')
+torch.set_float32_matmul_precision('high')
 
 max_steps = 6
 num_sentences = 50
@@ -64,15 +65,15 @@ tokenizer = AutoTokenizer.from_pretrained(bert_name, use_fast=True, revision="ma
 bert_model = AutoModel.from_pretrained(bert_name, revision="main")
 
 
-action_embed = BertPredictor(bert_model, 12, tokenizer, 768, 256, 1).cuda()
-action_embed_target = BertPredictor(bert_model, 12, tokenizer, 768, 256, 1).cuda()
+action_embed = BertPredictor(bert_model, 6, tokenizer, 768, 256, 1).cuda()
+action_embed_target = BertPredictor(bert_model, 6, tokenizer, 768, 256, 1).cuda()
 
-state_embed = BertPredictor(bert_model, 12, tokenizer, 768, 256, 1).cuda()
-state_embed_target = BertPredictor(bert_model, 12, tokenizer, 768, 256, 1).cuda()
+state_embed = BertPredictor(bert_model, 6, tokenizer, 768, 256, 1).cuda()
+state_embed_target = BertPredictor(bert_model, 6, tokenizer, 768, 256, 1).cuda()
 
 agent = DQN(
     state_embed, action_embed, state_embed_target, action_embed_target, 
-    DQNArgs(gamma=0.99, tau=0.01,  lr=5e-5, max_steps=(20_000 // 4) * max_steps)
+    DQNArgs(gamma=0.99, tau=0.01,  lr=1e-4, max_steps=(40_000 // 4) * max_steps)
 )
 
 
@@ -111,7 +112,7 @@ learning_start = 5_000
 step = 0
 R = 0
 entropy_list = []
-for ep_number in tqdm(range(20_000)):
+for ep_number in tqdm(range(40_000)):
 
     s = env.reset()
     done = False
@@ -138,14 +139,15 @@ for ep_number in tqdm(range(20_000)):
         a_all.append(action)
         
         if step > learning_start and step % 4 == 0:
-            s_batch, a_batch, next_s_batch, r_batch, not_done_batch, entropy_batch = buffer.sample(16)
-            qf_loss = agent.update(s_batch, a_batch, next_s_batch, r_batch, not_done_batch, step)
+            s_batch, a_batch, next_s_batch, r_batch, not_done_batch, entropy_batch = buffer.sample(32)
+            qf_loss = agent.update(s_batch, a_batch, next_s_batch, r_batch, not_done_batch)
             writer.add_scalar("qf_loss", qf_loss, step)
     
     writer.add_scalar("r_sum", r_sum, step)
     
     if ep_number % 100 == 0 and ep_number > 0:
-        print(R / 100, qf_loss)
+        print("R", R / 100, "qf loss", qf_loss)
+        print("alpha", agent.alpha)
         print(a_all, env.ref_ids)
         print(env.question, env.sentences[env.ref_ids[0]], env.sentences[env.ref_ids[1]])
         R = 0

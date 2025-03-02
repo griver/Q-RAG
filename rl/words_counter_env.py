@@ -30,6 +30,7 @@ class WordsCounterEnv(TextEnv):
                  embedder: nn.Module,
                  embed_tokenizer: Union[PreTrainedTokenizer,PreTrainedTokenizerFast],
                  max_steps_count: int,
+                 max_embed_length: int = 512,
                  add_question: bool = False,
                  subset: str = "train") -> None:
         
@@ -44,6 +45,8 @@ class WordsCounterEnv(TextEnv):
         self.embedder = embedder
         self.add_question = add_question
         self.max_steps_count = max_steps_count
+        self.max_embed_length = max_embed_length
+        self.action_embed_length = block_size
 
     def reset(self):
         self.index = (self.index + 1) % self.n
@@ -51,14 +54,16 @@ class WordsCounterEnv(TextEnv):
         context = self.dataset[self.index]["context"]
         self.label = self.dataset[self.index]["label"]
         word = self.dataset[self.index]["word"]
+        self.word = word
+        self.claim = claim
 
         if self.add_question:
-            tok_seq = self.tokenizer(context, max_length=self.max_length+1, truncation=True)
+            tok_seq = self.tokenizer(context, max_length=self.max_length, truncation=True)
         else:
-            tok_seq = self.tokenizer(claim, context, max_length=self.max_length+1, truncation=True)
+            tok_seq = self.tokenizer(claim, context, max_length=self.max_length, truncation=True)
         # rm the first [CLS] token
-        input_ids = np.asarray(tok_seq["input_ids"]).reshape(-1)[1:]
-        attention_mask = np.asarray(tok_seq["attention_mask"]).reshape(-1)[1:]
+        input_ids = np.asarray(tok_seq["input_ids"]).reshape(-1)
+        attention_mask = np.asarray(tok_seq["attention_mask"]).reshape(-1)
         
         T = input_ids.shape[0]
         pad_size = 0 if T % self.block_size == 0 else (self.block_size - T % self.block_size) 
@@ -80,7 +85,10 @@ class WordsCounterEnv(TextEnv):
 
         question = claim if self.add_question else ""
 
-        return super().reset(question, self.decoded_blocks)
+        question_tokens = self.tokenizer(claim, max_length=self.max_length)["input_ids"]
+        assert isSubArray_v2(question_tokens, word_tokens)
+
+        return super().reset(word, self.decoded_blocks)
 
     def _split_into_blocks(self):
         return {
