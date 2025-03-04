@@ -129,7 +129,6 @@ def train_args():
     return parser.parse_args()
 
 
-
 def main():
     args = train_args()
     num_chunks = args.num_chunks
@@ -379,7 +378,7 @@ def main():
         logger.info(f"test performance {metric['em']}")
         json.dump(metric['pred_list'], open(os.path.join(args.output_dir, "pred.json"), 'w'))
 
-def calculate_em_f1(predicted_support_idxs, gold_support_idxs):
+def calc_fact_f1_em(predicted_support_idxs, gold_support_idxs):
     # Taken from hotpot_eval
     cur_sp_pred = set(map(int, predicted_support_idxs))
     gold_sp_pred = set(map(int, gold_support_idxs))
@@ -418,7 +417,7 @@ def predict(tokenizer, model, eval_dataloader, logger, args):
         with torch.no_grad():
             current_preds = model(**batch)['current_preds']
         pred_list[id[0]] = current_preds[0]
-        f1, em = calculate_em_f1(current_preds[0], batch['sf_idx'][0])
+        f1, em = calc_fact_f1_em(current_preds[0], batch['sf_idx'][0])
         em_tot.append(em)
         f1_tot.append(f1)
 
@@ -445,7 +444,7 @@ def predict_2(tokenizer, model, eval_dataloader, logger, args):
         with torch.no_grad():
             current_preds = model(**batch)['current_preds']
         pred_list[id[0]] = current_preds[0]
-        f1, em = calculate_em_f1(current_preds[0], batch['sf_idx'][0])
+        f1, em = calc_fact_f1_em(current_preds[0], batch['sf_idx'][0])
         em_tot.append(em)
         f1_tot.append(f1)
 

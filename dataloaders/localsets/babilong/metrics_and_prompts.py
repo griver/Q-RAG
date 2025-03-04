@@ -1,20 +1,14 @@
+import re
+
 #this file is taken from official github repository for BabiLong
 TASK_TEMPLATE = '{instruction}\n\n{examples}\n\n{post_prompt}'
 USER_TEMPLATE = '<context>\n{context}\n</context>\n\nQuestion: {question}'
-DEFAULT_TEMPLATE = f'{TASK_TEMPLATE}\n\n{USER_TEMPLATE}'
+DEFAULT_TEMPLATE_OLD = f'{TASK_TEMPLATE}\n\n{USER_TEMPLATE}'
 
-CUSTOM_SYSTEM_PROMPTS = {
-    # https://github.com/dvlab-research/LongLoRA/blob/2345c6d030f61ac3a031906386a103a5b05e0e6f/inference.py#L18
-    'LONGLORA_LLAMA2':
-        'You are a helpful, respectful and honest assistant. Always answer as helpfully as possible, while being safe. '
-        'Your answers should not include any harmful, unethical, racist, sexist, toxic, dangerous, or illegal content. '
-        'Please ensure that your responses are socially unbiased and positive in nature.\n\n'
-        'If a question does not make any sense, or is not factually coherent, explain why instead of answering '
-        'something not correct. If you don\'t know the answer to a question, please don\'t share false information.'
-}
+TEMPLATE = '{instruction}\n{examples}\n{post_prompt}\nContext: {context}\n\nQuestion: {question}'
 
 
-def get_formatted_input(context, question, examples, instruction, post_prompt, template=DEFAULT_TEMPLATE):
+def get_formatted_input_old(context, question, examples, instruction, post_prompt, template=DEFAULT_TEMPLATE_OLD):
     # instruction - task instruction
     # examples - in-context examples
     # post_prompt - any additional instructions after examples
@@ -22,6 +16,25 @@ def get_formatted_input(context, question, examples, instruction, post_prompt, t
     # question - question to answer based on context
     formatted_input = template.format(instruction=instruction, examples=examples, post_prompt=post_prompt,
                                       context=context.strip(), question=question)
+    return formatted_input.strip()
+
+
+def clean_examples(initial_examples):
+    examples = re.sub('<example>', 'Example:', initial_examples)
+    examples = re.sub('</example>', '', examples)
+    return examples
+
+
+def get_formatted_input(context, question, examples, instruction, post_prompt, template=TEMPLATE):
+    # pre_prompt - general instruction
+    # examples - in-context examples
+    # post_prompt - any additional instructions after examples
+    # context - text to use for qa
+    # question - question to answer based on context
+    cleaned_examples = clean_examples(examples)
+
+    formatted_input = template.format(instruction=instruction, examples=cleaned_examples,
+                                      post_prompt=post_prompt, context=context, question=question)
     return formatted_input.strip()
 
 
@@ -528,39 +541,37 @@ TASK_LABELS = {'qa1': ['bathroom', 'bedroom', 'garden', 'hallway', 'kitchen', 'o
 }
 
 
-def preprocess_output(output):
-    output = output.lower()
-    # take only the first sentence from output
-    output = output.split('.')[0]
-    # filter responses when model tries to generate examples
-    output = output.split('<context>')[0]
-    output = output.split('<example>')[0]
-    output = output.split('Question')[0]
-    return output
+def compute_exact_match(pred, answer):
+    "Works for QA1-QA4 and every  task with single answer."
+    pred = pred.strip(" .").split()[-1]
+    return pred.lower() == answer.strip().lower()
 
 
-def compare_answers(target, output, question, task_labels):
-    output = preprocess_output(output)
-    target = target.lower()
-    task_labels = {label.lower() for label in task_labels}
+def gen_f1_metric(babi_task_name):
+    """
+    F1 score function is task dependent in case of Babilong.
+    This function receives name of the Babi Task ('qa1', 'qa2', etc.) and returns correspondent F1 function
+    """
+    def compute_f1(pred, target):
 
-    # extract labels that were mentioned in the question
-    labels_in_question = {label for label in task_labels if label in question.lower()}
-    # extract labels that were mentioned in the model output
-    labels_in_output = {label for label in task_labels if label in output}
-    # filter labels in the output to exclude mentioned in the question
-    # mentions in questions are never targets
-    labels_in_output = labels_in_output - labels_in_question
+        task_labels = set(TASK_LABELS[babi_task_name])
+        target = target.lower()
 
-    # check if the target is the only prediction
-    if ',' in target and len(target) > 3:
-        # if target contains multiple subtargets in qa8
-        subtargets = target.split(',')
-        num_subtargets = len(subtargets)
-        if all([t in labels_in_output for t in subtargets]) and len(labels_in_output) == num_subtargets:
-            return True
-    else:
-        if target in labels_in_output and len(labels_in_output) == 1:
-            return True
+        # extract labels that were mentioned in the model output
+        labels_in_pred = {label for label in task_labels if label in pred}
+        labels_in_target = {label for label in task_labels if label in target}
+        num_same = len(labels_in_pred.intersection(labels_in_target))
 
-    return False
+        if len(labels_in_target) == 0 or len(labels_in_pred) == 0:
+            # If either is no-answer, then F1 is 1 if they agree, 0 otherwise
+            return float(len(labels_in_pred) == len(labels_in_target))
+
+        if num_same == 0:
+            return 0.
+
+        precision = 1.0 * num_same / len(labels_in_pred)
+        recall = 1.0 * num_same / len(labels_in_target)
+        f1 = (2 * precision * recall) / (precision + recall)
+        return f1
+
+    return compute_f1
