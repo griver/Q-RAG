@@ -1,9 +1,11 @@
-# Load model directly
+import sys
+import os
+sys.path.append(os.getcwd()) #fix for importing error
+
 from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
 import torch
 from torch.utils.data import DataLoader
 import logging
-import os
 torch.random.manual_seed(0)
 from tqdm import tqdm
 from beam_retriever.retrieval.datasets import BeamRetrieverQADataset, collate_fn, BeamRetrieverQAAdapter
