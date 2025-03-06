@@ -8,6 +8,10 @@ This implementation also provides code to evaluate Beam Retriever in combination
 Beam Retriever is a retrieval technique that addresses the problem of long-context retrieval for various QA (question answering) tasks. 
 This repository contains code to train and evaluate the retriever, both standalone and in combination with the phi-3.5-mini model.
 
+## Data
+You can download all datasets and benchmarks from this [link](https://box.skoltech.ru/index.php/s/qrp0aUwgkU0q1qc).
+Unpack archive in the `.data_sources/`, e.g. `LongContex/datas_sources/babilong` or `LongContex/datas_sources/musique` 
+
 ## Training
 
 To start training the Beam Retriever, you can use:

@@ -541,10 +541,10 @@ TASK_LABELS = {'qa1': ['bathroom', 'bedroom', 'garden', 'hallway', 'kitchen', 'o
 }
 
 
-def compute_exact_match(pred, answer):
+def compute_exact_match(prediction, target):
     "Works for QA1-QA4 and every  task with single answer."
-    pred = pred.strip(" .").split()[-1]
-    return pred.lower() == answer.strip().lower()
+    prediction = prediction.strip(" .").split()[-1]
+    return prediction.lower() == target.strip().lower()
 
 
 def gen_f1_metric(babi_task_name):
@@ -552,13 +552,13 @@ def gen_f1_metric(babi_task_name):
     F1 score function is task dependent in case of Babilong.
     This function receives name of the Babi Task ('qa1', 'qa2', etc.) and returns correspondent F1 function
     """
-    def compute_f1(pred, target):
+    def compute_f1(prediction, target):
 
         task_labels = set(TASK_LABELS[babi_task_name])
         target = target.lower()
 
         # extract labels that were mentioned in the model output
-        labels_in_pred = {label for label in task_labels if label in pred}
+        labels_in_pred = {label for label in task_labels if label in prediction}
         labels_in_target = {label for label in task_labels if label in target}
         num_same = len(labels_in_pred.intersection(labels_in_target))
 

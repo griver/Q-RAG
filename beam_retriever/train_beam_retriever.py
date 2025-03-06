@@ -288,6 +288,7 @@ def main():
                 batch_step += 1
                 #print(f'\rbatch_step={batch_step}')
                 id = batch.pop('id')
+                answer = batch.pop('answer')
                 batch = move_to_cuda(batch)
                 if args.fp16:
                     with autocast():
@@ -411,7 +412,7 @@ def predict(tokenizer, model, eval_dataloader, logger, args):
     pred_list = {}
     for i, batch in enumerate(tqdm(eval_dataloader)):
         id = batch.pop('id')
-
+        answer = batch.pop('answer')
         mean_len.append(sum(len(c) for c in batch['c_codes'][0]) + len(batch['q_codes'][0]))
         batch = move_to_cuda(batch)
         with torch.no_grad():
@@ -431,29 +432,6 @@ def predict(tokenizer, model, eval_dataloader, logger, args):
     logger.info(f'mean length: {np.mean(mean_len)}')
     model.train()
     return {'em':em, 'f1': f1, 'pred_list': pred_list}
-
-
-def predict_2(tokenizer, model, eval_dataloader, logger, args):
-    model.eval()
-    logger.info("begin evaluation")
-    em_tot, f1_tot = [], []
-    pred_list = {}
-    for i, batch in enumerate(tqdm(eval_dataloader)):
-        id = batch.pop('id')
-        batch = move_to_cuda(batch)
-        with torch.no_grad():
-            current_preds = model(**batch)['current_preds']
-        pred_list[id[0]] = current_preds[0]
-        f1, em = calc_fact_f1_em(current_preds[0], batch['sf_idx'][0])
-        em_tot.append(em)
-        f1_tot.append(f1)
-
-    em = sum(em_tot) / len(em_tot)
-    f1 = sum(f1_tot) / len(f1_tot)
-    logger.info(f"evaluated {len(eval_dataloader)} examples...")
-    logger.info(f"performance: em: {em}, f1: {f1}")
-    model.train()
-    return {'em': em, 'f1': f1, 'pred_list': pred_list}
 
 
 if __name__ == "__main__":

@@ -8,15 +8,10 @@ from torch.utils.data import DataLoader
 import logging
 torch.random.manual_seed(0)
 from tqdm import tqdm
-from beam_retriever.retrieval.datasets import collate_fn, BeamRetrieverQAAdapter
-from dataloaders.localsets.babilong import RetrievalBabilong
-from dataloaders.localsets.musique import RetrievalMusique
-from prompts_and_metrics import (
-    DEFAULT_PROMPTS, TEMPLATE, get_formatted_input, compute_exact_match, gen_f1_metric
-)
+from beam_retriever.retrieval.datasets import collate_fn
+from prompts_and_metrics.general_qa import qa_instruction_prompt, qa_prompt, compute_exact_match, compute_f1
 from beam_retriever.retrieval.retriever_model import Retriever
 from beam_retriever.utils.utils import load_saved
-from dataloaders.globalset import PATHS
 import numpy as np
 from pathlib import Path
 import json
@@ -24,45 +19,15 @@ import pandas as pd
 from transformers import AutoConfig, AutoModel
 import argparse
 from beam_retriever.utils.utils import move_to_cuda
-from beam_retriever.train_beam_retriever import calc_fact_f1_em
+from beam_retriever.train_beam_retriever import calc_fact_f1_em, create_dataset
 
 
-def create_dataset(datasets_names, tokenizer, task, max_chunk_len=512, num_chunks=50, seed=52, split='train'):
-
-    datasets = []
-    for name in datasets_names:
-        if name == 'musique':
-            d = RetrievalMusique(path=PATHS['musique'], tokenizer=tokenizer, length=-1,
-                                   min_context_len=0, max_context_len=1e7,
-                                   type='any', anno_type='any', split=split, seed=seed)
-            datasets.append(d)
-
-        elif name == "babilong":
-            bl_split = 'test' if split == 'eval' else split #Babi dataset doesn't have eval split
-            d = RetrievalBabilong.create(
-                path='data_sources/babilong/', task=task, num_chunks=num_chunks,
-                noise_data_path='pg19-with-sentences/', seed=seed, split=bl_split
-            )
-            datasets.append(d)
-        else:
-            raise ValueError(f'{name} is not adapted to Beam Retriever.')
-
-    dataset = BeamRetrieverQAAdapter(datasets, tokenizer, "80:20", max_chunk_len=max_chunk_len)
-
-    return dataset
-
-
-def prepare_messages(question, facts, prompt_cfg, user_template):
-    str_of_facts = " ".join([f for f in facts])
-
-    #input_text = user_prompt.format(question=question, str_of_facts=str_of_facts, suffix=word_suffix)
-    input_text = get_formatted_input(str_of_facts, question, prompt_cfg['examples'],
-                                     prompt_cfg['instruction'], prompt_cfg['post_prompt'],
-                                     template=user_template)
-    #input = tokenizer(input_text, return_tensors="pt", add_special_tokens=True).to(model.device)
+def prepare_messages(question, facts, prompt_cfg):
+    str_of_facts = "\n".join([f for f in facts])
+    input_text = prompt_cfg['qa_prompt'].format(question=question+"?", context=str_of_facts)
 
     messages = [
-        {"role": "system", "content": "Your are an AI assistant, your job is to answer questions given to you by the user."},
+        {"role": "system", "content": prompt_cfg['qa_instruction_prompt']},
         {"role": "user", "content": input_text},
     ]
     return messages
@@ -144,7 +109,7 @@ def evaluate_retriever_and_llm(r_tokenizer, retriever, llm_pipe, eval_dataloader
         fact_texts = r_tokenizer.batch_decode(fact_tokens)
         question = r_tokenizer.decode(batch['q_codes'][0], skip_special_tokens=True)
 
-        messages = prepare_messages(question.strip(), fact_texts, prompt_cfg, TEMPLATE)
+        messages = prepare_messages(question.strip(), fact_texts, prompt_cfg)
         output = llm_pipe(messages, **generate_kwargs)
         pred  = output[0]['generated_text']
 
@@ -188,22 +153,26 @@ def evaluate_retriever_and_llm(r_tokenizer, retriever, llm_pipe, eval_dataloader
     }
 
 
-
 def eval_args():
     parser = argparse.ArgumentParser()
-
+    parser.add_argument("-d", "--dataset", type=str, action='append',
+                        help="Training datasets. Specify each with a separate flag -d. "
+                             "Available choices: musique, babilong, hotpotqa",
+                        required=True)
     parser.add_argument("--no_cuda", default=False, action='store_true',
                         help="Whether not to use CUDA when available")
     parser.add_argument("--local_rank", type=int, default=-1,
                         help="local_rank for distributed training on gpus")
     # model
-    parser.add_argument("--model_name", default="model/deberta-v3-base", type=str)
+    #--model_name microsoft / deberta - v3 - base
+    #--tokenizer_path microsoft / deberta - v3 - base
+    parser.add_argument("--model_name", default="microsoft/deberta-v3-base", type=str)
     parser.add_argument("--beam_size", default=1, type=int)
     parser.add_argument("--use_flash_attention", action='store_true')
     parser.add_argument("--flash_attention_type", default='None', type=str)
     #parser.add_argument("--dataset_type", default='hotpot', type=str)
     parser.add_argument("--mean_passage_len", default=120, type=int)
-    parser.add_argument("--tokenizer_path", type=str, default='model/deberta-v3-base')
+    parser.add_argument("--tokenizer_path", type=str, default='microsoft/deberta-v3-base')
     parser.add_argument("--init_checkpoint", type=str,
                         help="Initial checkpoint (usually from a pre-trained BERT model).",
                         default="")
@@ -219,11 +188,14 @@ def eval_args():
 #    parser.add_argument("--predict_file", type=str,
 #                        default="data/datasets/mrc/hotpotqa/hotpot_dev_distractor_v1.json")
     parser.add_argument("--num_workers", default=4, type=int)
+    parser.add_argument('--prefix', type=str, default="default_prefix")
     parser.add_argument("--temperature", default=1, type=float)
     parser.add_argument("--output_dir", default="./output", type=str,
                         help="The output directory where the model checkpoints will be written.")
     parser.add_argument('--seed', type=int, default=42,
                         help="random seed for initialization")
+    parser.add_argument('--eval_period', type=int, default=-1)
+    parser.add_argument('--eval_period_ratio', type=float, default=-1.0)
     parser.add_argument('--log_period_ratio', type=float, default=0.01)
     parser.add_argument("--max_grad_norm", default=2.0, type=float, help="Max gradient norm.")
     parser.add_argument("--stop-drop", default=0, type=float)
@@ -235,11 +207,15 @@ def eval_args():
     return parser.parse_args()
 
 
+def get_log_dir(args):
+    dataset_str = "_".join(args.dataset)
+    log_dir = f'./output/QA_evals/beam-retriever_phi_3.5-mini/{dataset_str}/'
+    Path(log_dir).mkdir(parents=True, exist_ok=True)
+    return log_dir
+
 
 if __name__ == "__main__":
     args = eval_args()
-    args.dataset = ['babilong',]
-    args.babi_task = "qa2"
 
     logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s - %(message)s', datefmt='%m/%d/%Y %H:%M:%S',
                         level=logging.INFO,
@@ -273,12 +249,9 @@ if __name__ == "__main__":
     }
 
     prompt_cfg = {
-        'instruction': DEFAULT_PROMPTS[args.babi_task]['instruction'],
-        'examples': DEFAULT_PROMPTS[args.babi_task]['examples'],
-        'post_prompt': DEFAULT_PROMPTS[args.babi_task]['post_prompt'],
-        'template': TEMPLATE,
+        'qa_instruction_prompt': qa_instruction_prompt,
+        'qa_prompt': qa_prompt,
     }
-    compute_f1 = gen_f1_metric(args.babi_task)
 
     model, tokenizer = init_answerer(answerer_model_name)
     pipe = pipeline(
@@ -289,12 +262,12 @@ if __name__ == "__main__":
 
     retriever, r_tokenizer = init_retriever(vars(args))
 
-    outfile = Path(f'./output/babilong_evals/beam-retriever_phi_3.5-mini/{args.num_chunks}_chunks/{args.babi_task}/logs.csv')
-    outfile.parent.mkdir(parents=True, exist_ok=True)
-    res_file = f'./output/babilong_evals/beam-retriever_phi_3.5-mini/{args.num_chunks}_chunks/{args.babi_task}/results.json'
-    cfg_file = f'./output/babilong_evals/beam-retriever_phi_3.5-mini/{args.num_chunks}_chunks/{args.babi_task}/config.json'
+    log_dir = get_log_dir(args)
+    outfile = Path(f'{log_dir}/logs.csv')
+    # outfile.parent.mkdir(parents=True, exist_ok=True)
+    res_file = f'{log_dir}/results.json'
+    cfg_file = f'{log_dir}/config.json'
     json.dump({'prompt': prompt_cfg, 'generate_kwargs': generate_kwargs}, open(cfg_file, 'w'), indent=4)
-
 
 
     eval_dataset = create_dataset(
