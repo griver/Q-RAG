@@ -1,16 +1,24 @@
 # Beam Retriever
 This repository provides an implementation of the [Beam Retriever](https://arxiv.org/abs/2308.08973) method.
 Code inspired by the official implementation, but adapted to datasets and evaluations we are interested in. 
-This implementation also provides code to evaluate Beam Retriever in combination with `phi-3.5-mini` model. 
+This implementation also provides code to evaluate Beam Retriever in combination with `phi-3.5-mini` model using RAG pipeline. 
 
 ## Overview
-
 Beam Retriever is a retrieval technique that addresses the problem of long-context retrieval for various QA (question answering) tasks. 
 This repository contains code to train and evaluate the retriever, both standalone and in combination with the phi-3.5-mini model.
 
-## Data
-You can download all datasets and benchmarks from this [link](https://box.skoltech.ru/index.php/s/qrp0aUwgkU0q1qc).
-Unpack archive in the `.data_sources/`, e.g. `LongContex/datas_sources/babilong` or `LongContex/datas_sources/musique` 
+## Installation
+#### Dependecies
+We recommend using a **conda** environment for the installation:
+```bash
+conda create -n beam_retriever_test python=3.12
+conda activate beam_retriever_test
+pip install -r requirements.txt
+```
+#### Datasets and pretrained models
+All pretrained models and zip arhive with all datasets can be downloaded from the following link: [Google Drive](https://drive.google.com/drive/folders/1UUIx-6vEBF9Mij81iVgPul86aXhdyxhG?usp=sharing)
+
+Unpack archive in the `LongContext` folder, i.e. you should get following paths: `LongContex/data_sources/babilong`, `LongContex/data_sources/musique`
 
 ## Training
 

@@ -34,13 +34,13 @@ def prepare_messages(question, facts, prompt_cfg):
 
 
 def init_answerer(model_name):
-    tokenizer = AutoTokenizer.from_pretrained(answerer_model_name, trust_remote_code=True)
+    tokenizer = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
     model = AutoModelForCausalLM.from_pretrained(
-        answerer_model_name,
+        model_name,
         device_map="cuda",
         torch_dtype='auto',
         trust_remote_code=True,
-        attn_implementation="eager"
+        attn_implementation="flash_attention_2" #"eager"
     )
     model.eval()
 
@@ -74,8 +74,11 @@ def init_retriever(retr_cfg):
     return model, tokenizer
 
 
-torch.no_grad()
-def evaluate_retriever_and_llm(r_tokenizer, retriever, llm_pipe, eval_dataloader, logger, args, outfile):
+@torch.no_grad()
+def evaluate_retriever_and_llm(
+        r_tokenizer, retriever, llm_pipe, eval_dataloader,
+        compute_f1, compute_exact_match, prompt_cfg, logger, args, log_file
+):
     retriever.eval()
     logger.info("begin evaluation")
     df = pd.DataFrame({
@@ -121,7 +124,7 @@ def evaluate_retriever_and_llm(r_tokenizer, retriever, llm_pipe, eval_dataloader
         all_lens[id] = sum(len(c) for c in batch['c_codes'][0]) + len(batch['q_codes'][0])
 
         df.loc[len(df)] = [id, question, pred, target, str(fact_pred), str(fact_target), all_lens[id]]
-        df.to_csv(outfile)
+        df.to_csv(log_file)
 
         if (args.num_eval_samples >= 0) and (i >= args.num_eval_samples):
             break
@@ -263,7 +266,7 @@ if __name__ == "__main__":
     retriever, r_tokenizer = init_retriever(vars(args))
 
     log_dir = get_log_dir(args)
-    outfile = Path(f'{log_dir}/logs.csv')
+    log_file = Path(f'{log_dir}/logs.csv')
     # outfile.parent.mkdir(parents=True, exist_ok=True)
     res_file = f'{log_dir}/results.json'
     cfg_file = f'{log_dir}/config.json'
@@ -281,6 +284,10 @@ if __name__ == "__main__":
         num_workers=args.num_workers, collate_fn=collate_fn
     )
 
-    results = evaluate_retriever_and_llm(r_tokenizer, retriever, pipe, eval_dataloader, logger, args, outfile)
+    results = evaluate_retriever_and_llm(
+        r_tokenizer, retriever, pipe, eval_dataloader,
+        compute_f1=compute_f1, compute_exact_match=compute_exact_match,
+        prompt_cfg=prompt_cfg, logger=logger, args=args, log_file=log_file
+    )
     json.dump(results, open(res_file, 'w'), indent=4)
 
