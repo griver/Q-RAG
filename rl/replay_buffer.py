@@ -12,15 +12,17 @@ class ReplayBuffer(object):
         self.state = [None,]*max_size
         self.action = [None,]*max_size
         self.next_state = [None,]*max_size
+        self.next_action = [None,]*max_size
         self.reward = np.zeros((max_size, 1))
         self.entropy = np.zeros((max_size, 1))
         self.not_done = np.zeros((max_size, 1))
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    def add(self, state, action, next_state, reward, done, entropy):
+    def add(self, state, action, next_state, next_action, reward, done, entropy):
         self.state[self.ptr] = state
         self.action[self.ptr] = action
         self.next_state[self.ptr] = next_state
+        self.next_action[self.ptr] = next_action
         self.reward[self.ptr] = reward
         self.entropy[self.ptr] = entropy
         self.not_done[self.ptr] = 1. - int(done)
@@ -32,9 +34,9 @@ class ReplayBuffer(object):
         if not correct_termination:
             raise ValueError(f'strange episode with {sum(dones)} done values set to True')
 
-        for s_i, a_i, next_s_i, r_i, done_i in zip(s,a, next_s, r, dones):
-            self.add(s_i, a_i, next_s_i, r_i, done_i)
-
+        next_a = a[1:] + [a[-1]]
+        for s_i, a_i, next_s_i, next_a_i, r_i, done_i in zip(s, a, next_s, next_a, r, dones):
+            self.add(s_i, a_i, next_s_i, next_a_i, r_i, done_i, 0)
 
     def __len__(self):
         return self.size
@@ -45,14 +47,8 @@ class ReplayBuffer(object):
         s = [self.state[i] for i in ind]
         a = [self.action[i] for i in ind]
         next_s = [self.next_state[i] for i in ind]
+        next_a = [self.next_action[i] for i in ind]
         r = self.reward[ind]
         not_done = self.not_done[ind]
         entropy = self.entropy[ind]
-        return s, a, r, next_s, not_done, entropy
-
-    # def normalize_states(self, eps=1e-3):
-    #     mean = self.state.mean(0, keepdims=True)
-    #     std = self.state.std(0, keepdims=True) + eps
-    #     self.state = (self.state - mean)/std
-    #     self.next_state = (self.next_state - mean)/std
-    #     return mean, std
+        return s, a, r, next_s, next_a, not_done, entropy

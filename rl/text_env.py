@@ -203,10 +203,11 @@ class TextReplayBuffer(ReplayBuffer):
 
     @torch.no_grad()
     def sample(self, batch_size):
-        s, a, r, next_s, not_done, entropy = super().sample(batch_size)
+        s, a, r, next_s, next_a, not_done, entropy = super().sample(batch_size)
 
         s_stack = self.stack_memory(s)
         next_s_stack = self.stack_memory(next_s)
         a_stack = self.stack_actions(a)
+        next_a_stack = self.stack_actions(next_a)
         
-        return s_stack, a_stack, next_s_stack, torch.FloatTensor(r).to(torch.get_default_device()), torch.FloatTensor(not_done).to(torch.get_default_device()), torch.FloatTensor(entropy).to(torch.get_default_device())    
+        return s_stack, a_stack, next_s_stack, next_a_stack, torch.FloatTensor(r).to(torch.get_default_device()), torch.FloatTensor(not_done).to(torch.get_default_device()), torch.FloatTensor(entropy).to(torch.get_default_device())    

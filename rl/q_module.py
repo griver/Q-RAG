@@ -36,11 +36,13 @@ class TextQNet(nn.Module):
         super().__init__()
         self.state_embed = state_embed
         self.action_embed = action_embed
+        # self.action_embed.eval()
         # self.weight = nn.Parameter(torch.ones(1))
         # self.bias = nn.Parameter(torch.zeros(1))
 
     def forward(self, s: TextMemory, a: TextMemoryItem): 
         s_embed = self.state_embed(input_ids=s.input_ids, attention_mask=s.attention_mask)
+        # self.action_embed.eval()
         a_embed = self.action_embed(input_ids=a.input_ids, attention_mask=a.attention_mask)
         
         D = s_embed.shape[-1] // 2
@@ -53,6 +55,12 @@ class TextQNet(nn.Module):
         return logits_1, logits_2
 
         # return (s_embed * a_embed).sum(-1) 
+
+
+class TextQNetTarget(TextQNet):
+    @torch.no_grad()
+    def update(self, q_net: TextQNet, decay: float = 0.01):
+        soft_update(self, q_net, decay)
 
 
 class ActionEmbedTarget(nn.Module):

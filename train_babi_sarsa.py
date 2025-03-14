@@ -15,12 +15,10 @@ import datasets
 from datasets import Dataset, load_dataset, load_from_disk
 import torch
 import sys
-from rl.dqn import DQN, DQNArgs
+from rl.sarsa import SARSA, SARSAArgs
 import time
 import numpy as np
-from collections import deque
 from rl.babilong_env import BabilongEnv
-from rl.sacd import SAC, SACArgs
 from rl.text_env import TextReplayBuffer
 from transformers import AutoModel, AutoTokenizer
 from rl.bert_predictor import BertPredictor
@@ -40,7 +38,7 @@ noise_path_test = "/home/nazar/pg19-test-with-sentences"
 facts_train_path = f"/home/nazar/tasks_1-20_v1-2/en-10k/{task}_train.txt"
 facts_test_path = f"/home/nazar/tasks_1-20_v1-2/en-10k/{task}_test.txt"
 
-writer = SummaryWriter(comment="DQN_" + task)
+writer = SummaryWriter(comment="SARSA_" + task)
 
 fact_dataset = QA2FixWrapper(TaskDataset(facts_train_path), add_sentence_idx=True)  
 test_fact_dataset = QA2FixWrapper(TaskDataset(facts_test_path), add_sentence_idx=True)   
@@ -65,27 +63,28 @@ tokenizer = AutoTokenizer.from_pretrained(bert_name, use_fast=True, revision="ma
 bert_model = AutoModel.from_pretrained(bert_name, revision="main")
 
 
-action_embed = BertPredictor(bert_model, 12, tokenizer, 768, 256, 1).cuda()
-action_embed_target = BertPredictor(bert_model, 12, tokenizer, 768, 256, 1).cuda()
+action_embed = BertPredictor(bert_model, 6, tokenizer, 768, 256, 1).cuda()
+action_embed_target = BertPredictor(bert_model, 6, tokenizer, 768, 256, 1).cuda()
 
-state_embed = BertPredictor(bert_model, 12, tokenizer, 768, 256, 1).cuda()
-state_embed_target = BertPredictor(bert_model, 12, tokenizer, 768, 256, 1).cuda()
+state_embed = BertPredictor(bert_model, 6, tokenizer, 768, 256, 1).cuda()
+state_embed_target = BertPredictor(bert_model, 6, tokenizer, 768, 256, 1).cuda()
 
-agent = DQN(
+agent = SARSA(
     state_embed, action_embed, state_embed_target, action_embed_target, 
-    DQNArgs(gamma=0.99, tau=0.01,  lr=1e-4, max_steps=(40_000 // 4) * max_steps)
+    SARSAArgs(lr=1e-4, max_steps=(40_000 // 4) * max_steps, warmup_steps=1000, exploration_steps=10000,
+            epsilon_warmup=0.5, epsilon_final=0.01)
 )
 
 
 env = BabilongEnv( 
-    embedder=agent.action_embed_target, 
+    embedder=agent.critic_target.action_embed, 
     embed_tokenizer=tokenizer, 
     dataset=dataset,
     max_steps=max_steps
 )
 
 env_test = BabilongEnv( 
-    embedder=agent.action_embed_target, 
+    embedder=agent.critic_target.action_embed, 
     embed_tokenizer=tokenizer, 
     dataset=dataset_test,
     max_steps=max_steps
@@ -93,21 +92,20 @@ env_test = BabilongEnv(
 
 buffer = TextReplayBuffer(100_000, tokenizer = tokenizer)
 
-
 def evaluate(env_test, agent):
     s = env_test.reset()
     done = False
     a_embeds = env_test.get_extra_embeds(agent.critic.action_embed)
     r_sum = 0
     while not done:
-        action = agent.select_action(s, a_embeds, random=False, evaluate=True)
+        action = agent.select_action(s, a_embeds, evaluate=True)
         s, _, reward, done = env_test.step(action)
         r_sum += reward
     
     return r_sum
     
 
-learning_start = 1_000
+learning_start = 100
 
 step = 0
 R = 0
@@ -118,36 +116,44 @@ for ep_number in tqdm(range(40_000)):
     done = False
     a_embeds = env.get_extra_embeds(agent.critic.action_embed)
     agent.policy.update(agent.critic)
-    agent.policy.train()
-    agent.critic.action_embed.train()
+    agent.policy.eval()
+    agent.critic.train()
 
     qf_loss, alpha_loss = 0, 0
     r_sum = 0
 
-    a_all = []
+    s_all, a_all, a_data_all, next_s_all, r_all, dones_all, entropy_all = [], [], [], [], [], [], []
 
     while not done:
         step += 1
         
-        action = agent.select_action(s, a_embeds, random = step < learning_start)
+        action = agent.select_action(s, a_embeds, evaluate=False)
         s_next, a_data, reward, done = env.step(action)
-        buffer.add(s, a_data, s_next, reward, done, 0)
+        # buffer.add(s, a_data, s_next, reward, done, 0)
+
+        s_all.append(s)
+        a_data_all.append(a_data)
+        a_all.append(action)
+        next_s_all.append(s_next)
+        r_all.append(reward)
+        dones_all.append(done)
+        entropy_all.append(0)
         
         s = s_next
         R += reward
         r_sum += reward
-        a_all.append(action)
         
         if step > learning_start and step % 4 == 0:
-            s_batch, a_batch, next_s_batch, r_batch, not_done_batch, entropy_batch = buffer.sample(32)
-            qf_loss = agent.update(s_batch, a_batch, next_s_batch, r_batch, not_done_batch)
+            s_batch, a_batch, next_s_batch, next_a_batch, r_batch, not_done_batch, entropy_batch = buffer.sample(32)
+            qf_loss = agent.update(s_batch, a_batch, next_s_batch, next_a_batch, r_batch, not_done_batch)
             writer.add_scalar("qf_loss", qf_loss, step)
+
+    buffer.add_episode(s_all, a_data_all, next_s_all, r_all, dones_all)
     
     writer.add_scalar("r_sum", r_sum, step)
     
     if ep_number % 100 == 0 and ep_number > 0:
         print("R", R / 100, "qf loss", qf_loss)
-        print("alpha", agent.alpha)
         print(a_all, env.ref_ids)
         print(env.question, env.sentences[env.ref_ids[0]], env.sentences[env.ref_ids[1]])
         R = 0

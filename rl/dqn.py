@@ -58,7 +58,7 @@ class DQN(object):
 
         self.gamma = args.gamma
         self.tau = args.tau
-        self.alpha = 0.01
+        self.alpha = 0.005
         self.start_lr = args.lr
 
         self.critic = TextQNet(state_embed, action_embed).to(torch.get_default_device())
@@ -132,7 +132,7 @@ class DQN(object):
             torch.tensor(self.alpha), torch.tensor(self.gamma))        
         
         self.sheduler.step()
-        self.alpha = 0.01 * self.sheduler.get_lr()[0].item() / self.start_lr 
+        self.alpha = 0.005 * self.sheduler.get_lr()[0].item() / self.start_lr 
             
         self.v_net_target.update(self.critic, self.tau)
         self.action_embed_target.update(self.critic, self.tau)
