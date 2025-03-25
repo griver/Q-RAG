@@ -15,7 +15,7 @@ import datasets
 from datasets import Dataset, load_dataset, load_from_disk
 import torch
 import sys
-from rl.dqn import DQN, DQNArgs
+from rl.pqn import PQN, PQNArgs
 import time
 import numpy as np
 from collections import deque
@@ -29,7 +29,7 @@ from tqdm import tqdm
 import torch
 
 
-torch.set_default_device('cuda:0')
+torch.set_default_device('cuda:1')
 torch.set_float32_matmul_precision('high')
 
 max_steps = 6
@@ -75,9 +75,10 @@ action_embed_target = BertPredictor(bert_model, 6, tokenizer, 768, 256, 1).cuda(
 state_embed = BertPredictor(bert_model, 12, tokenizer, 768, 256, 1).cuda()
 state_embed_target = BertPredictor(bert_model, 12, tokenizer, 768, 256, 1).cuda()
 
-agent = DQN(
-    state_embed, action_embed, state_embed_target, action_embed_target, 
-    DQNArgs(gamma=0.99, tau=0.01,  lr=1e-4, max_steps=(40_000 // 4) * max_steps)
+
+agent = PQN(
+    state_embed, action_embed,
+    state_embed_target, action_embed_target
 )
 
 
@@ -95,35 +96,41 @@ env_test = BabilongEnv(
     max_steps=max_steps
 )
 
-buffer = TextReplayBuffer(100_000, tokenizer = tokenizer)
-
-
+@torch.no_grad()
 def evaluate(env_test, agent):
     s = env_test.reset()
     done = False
     a_embeds = env_test.get_extra_embeds(agent.critic.action_embed)
     r_sum = 0
     while not done:
-        action = agent.select_action(s, a_embeds, random=False, evaluate=True)
+        action, _, _ = agent.select_action(s, a_embeds, random=False, evaluate=True)
         s, _, reward, done = env_test.step(action)
         r_sum += reward
     
     return r_sum
-    
 
-learning_start = 1_000
+
+buffer = TextReplayBuffer(32, tokenizer = tokenizer)
+    
+learning_start = 100
 
 step = 0
 R = 0
 entropy_list = []
-for ep_number in tqdm(range(40_000)):
+for ep_number in tqdm(range(300_000)):
+
+    agent.policy.update(agent.critic)
+    agent.v_net_target.update(agent.critic, agent.tau)
+    agent.action_embed_target.update(agent.critic, agent.tau)
 
     s = env.reset()
     done = False
-    a_embeds = env.get_extra_embeds(agent.critic.action_embed)
-    agent.policy.update(agent.critic)
-    agent.policy.train()
+
     agent.critic.action_embed.train()
+    a_embeds = env.get_extra_embeds(agent.critic.action_embed)
+
+    agent.policy.train()
+    agent.critic.train()
 
     qf_loss, alpha_loss = 0, 0
     r_sum = 0
@@ -133,19 +140,20 @@ for ep_number in tqdm(range(40_000)):
     while not done:
         step += 1
         
-        action = agent.select_action(s, a_embeds, random = step < learning_start)
+        action, _, q_values  = agent.select_action(s, a_embeds, random = step < learning_start)
         s_next, a_data, reward, done = env.step(action)
-        buffer.add(s, a_data, s_next, a_data, reward, done, 0, 0)
+        buffer.add(s, a_data, s_next, a_data, reward, done, 0, q_values.max().cpu().item())
         
         s = s_next
         R += reward
         r_sum += reward
         a_all.append(action)
         
-        if step > learning_start and step % 4 == 0:
-            s_batch, a_batch, next_s_batch, _, r_batch, not_done_batch, entropy_batch = buffer.sample(32)
-            qf_loss = agent.update(s_batch, a_batch, next_s_batch, r_batch, not_done_batch)
-            writer.add_scalar("qf_loss", qf_loss, step)
+        if step > learning_start and step % 32 == 0:
+            for _ in range(1):
+                s_batch, a_batch, next_s_batch, _, r_batch, not_done_batch, entropy_batch, q_batch = buffer.ordered_sample(30)
+                qf_loss = agent.update(s_batch, a_batch, next_s_batch, q_batch, r_batch, not_done_batch)
+                writer.add_scalar("qf_loss", qf_loss, step)
     
     writer.add_scalar("r_sum", r_sum, step)
     

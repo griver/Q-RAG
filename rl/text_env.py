@@ -23,7 +23,6 @@ def pad_sequence_power_2(seq_list: List[Tensor], padding_value, batch_first=True
     assert pad_2.shape[1] == max_len_2
     return pad_2
 
-
 class TextEnv:
 
     separator = " [SEP] "
@@ -40,7 +39,7 @@ class TextEnv:
         return {k: np.asarray(v) for k, v in tokens.items()}
     
     def tokenize_list(self, text_array: List[str]) -> np.ndarray:
-        tokens = self.embed_tokenizer(text_array, truncation=True, max_length=self.max_embed_length)
+        tokens = self.embed_tokenizer(text_array, truncation=True, max_length=self.action_embed_length)
         return [{k: np.asarray(v[i]) for k, v in tokens.items()} for i in range(len(text_array))]
 
     @torch.no_grad()
@@ -50,7 +49,7 @@ class TextEnv:
             padding=True, 
             truncation=True, 
             return_tensors="pt", 
-            max_length=self.max_embed_length
+            max_length=self.action_embed_length
         ).to(torch.get_default_device())
 
         B = batch["input_ids"].shape[0]
@@ -69,7 +68,7 @@ class TextEnv:
             padding=True, 
             truncation=True, 
             return_tensors="pt", 
-            max_length=self.max_embed_length
+            max_length=self.action_embed_length
         ).to(torch.get_default_device())
 
         return embedder(**batch)
@@ -140,6 +139,13 @@ class TextEnv:
         return self.memory, memory_item, done
     
 
+class ParallelTextEnv:
+
+    def __init__(self, text_envs: List[TextEnv]):
+        self.text_envs = text_envs
+
+    
+
 class TextReplayBuffer(ReplayBuffer):
 
     def __init__(self, max_size, tokenizer: PreTrainedTokenizer):
@@ -200,6 +206,22 @@ class TextReplayBuffer(ReplayBuffer):
         )
         
         return a_blocck
+    
+    @torch.no_grad()
+    def ordered_sample(self, batch_size):
+        s, a, r, next_s, next_a, not_done, entropy, q_values = super().ordered_sample(batch_size)
+
+        s_stack = self.stack_memory(s)
+        next_s_stack = self.stack_memory(next_s)
+        a_stack = self.stack_actions(a)
+        next_a_stack = self.stack_actions(next_a)
+        
+        return s_stack, a_stack, next_s_stack, next_a_stack, \
+            torch.FloatTensor(r).to(torch.get_default_device()), \
+            torch.FloatTensor(not_done).to(torch.get_default_device()), \
+            torch.FloatTensor(entropy).to(torch.get_default_device()), \
+            torch.FloatTensor(q_values).to(torch.get_default_device())    
+
 
     @torch.no_grad()
     def sample(self, batch_size):

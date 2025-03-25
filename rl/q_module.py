@@ -106,14 +106,14 @@ class TextQNetPolicy(nn.Module):
         s_embed = self.state_embed(input_ids=s.input_ids, attention_mask=s.attention_mask)
         s_embed = s_embed.unsqueeze(1)
         
-        logits = (s_embed * a_embeds).sum(-1) / 2
+        logits = (s_embed * a_embeds).sum(-1) 
         logits[s.available_mask == False] = logits.min() - 1
 
         top_ids = torch.topk(logits, self.top_k_actions, dim=1).indices
         top_mask = torch.zeros_like(logits > 0).scatter_(1, top_ids, True)
 
         if return_arg_max:
-            return torch.argmax(logits, -1), torch.tensor([0]), torch.tensor([0])
+            return torch.argmax(logits, -1), logits
 
         probs = ((logits - logits.max()) / alpha).softmax(-1)
         probs[(s.available_mask & top_mask) == False] = 0
@@ -121,7 +121,7 @@ class TextQNetPolicy(nn.Module):
         dist = torch.distributions.Categorical(probs = probs)
         action = dist.sample()
 
-        return action, dist.log_prob(action), dist.entropy()
+        return action, logits
     
 
 class TextRandomPolicy(nn.Module):
