@@ -7,7 +7,7 @@ Folders:
 * `prompts_and_metrics` contains prompts and metrics to evaluate llm on our datasets
 * `rl_retieval` contains first tamplates formulating interaction between `RetievalEnv` and `RetrievalPolicy`
 
-## First start
+## Quickstart
 Run `test_env.py` to see simple example of interaction between `RetievalEnv` and a toy policy:
 ```python
 python rl_retrieval/test_env.py
