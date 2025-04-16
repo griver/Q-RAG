@@ -1,0 +1,16 @@
+defaults:
+  - env: babilong 
+  - algo: pqn
+  - logger: tb
+  - _self_
+
+seed: 42
+device: 'cuda:1'
+buffer_size: 32
+learning_start: 100
+steps_count: 1_000_000
+update_every: 32
+batch_size: 30
+log_interval: 100
+eval_interval: 1000
+eval_episodes: 100

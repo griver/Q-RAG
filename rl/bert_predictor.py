@@ -12,6 +12,7 @@ class BertPredictor(nn.Module):
         
         self.head = nn.Linear(model_dim, output_size)
         self.n_output = n_output
+        self.tokenizer = tokenizer
         self.pad_token_id: int = tokenizer.pad_token_id
         self.cls_token_id: int = tokenizer.cls_token_id
         self.sep_token_id: int = tokenizer.sep_token_id

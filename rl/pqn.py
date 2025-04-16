@@ -11,8 +11,9 @@ from rl.sarsa import set_optim
 from .q_module import TextQNet, TextQNetPolicy, TextRandomPolicy, ActionEmbedTarget, TextMaxQNet, TextVNet
 from .text_env import TextMemory, TextMemoryItem
 import copy
+from omegaconf import DictConfig, OmegaConf
+from hydra.utils import instantiate
 
-PQNArgs = namedtuple("PQNArgs", ["gamma", "tau", "lr", "max_steps"])
 
 @partial(torch.compile, mode="reduce-overhead")
 def train_step(
@@ -33,41 +34,33 @@ def train_step(
 
 
 @partial(torch.compile)
-def policy_apply(policy, state, a_embeds, alpha, return_argmax: bool):
-    return policy(state, a_embeds, alpha, return_argmax)
+def policy_apply(policy, v_net, state, a_embeds, alpha, return_argmax: bool):
+    action, q_values = policy(state, a_embeds, alpha, return_argmax)
+    # v1, v2 = v_net(state, alpha=alpha)
+    # q_values_target = v1 + v2
+    q_values_target = torch.tensor(0.0)
+    return action, q_values, q_values_target
 
 
 class PQN(object):
 
-    DEFAULT_OPT = dict(
-        optim = 'adamw',
-        lr = 5e-5,
-        eps = 1e-06,
-        weight_decay = 0.01,
-        beta1 = 0.9,
-        beta2 = 0.98,
-        dropout = 0.1,
-        scheduler = 'linear',
-        total_steps = 40000,
-        lr_min_ratio = 0.0,
-        warmup_steps = 1000,
-    )
+    def __init__(self, config: DictConfig):
 
+        self.gamma = config.pqn.hyperparams.gamma
+        self.alpha = config.pqn.hyperparams.alpha
+        self.alpha_start = self.alpha 
+        self.Lambda = config.pqn.hyperparams.Lambda
+        self.tau = config.pqn.hyperparams.tau
+        self.start_lr = config.pqn.optimizer.lr
 
-    def __init__(self, 
-                 state_embed: nn.Module,
-                 action_embed: nn.Module,
-                 state_embed_target: nn.Module,
-                 action_embed_target: nn.Module):
-
-        self.gamma = 0.99
-        self.alpha = 0.005
-        self.Lambda = 0.6
-        self.tau = 0.01
-        self.start_lr = PQN.DEFAULT_OPT["lr"]
+        state_embed: nn.Module = instantiate(config.pqn.state_embed)
+        action_embed: nn.Module = instantiate(config.pqn.action_embed)
+        state_embed_target: nn.Module = instantiate(config.pqn.state_embed_target)
+        action_embed_target: nn.Module = instantiate(config.pqn.action_embed_target)
 
         self.critic = TextQNet(state_embed, action_embed).to(torch.get_default_device())
-        self.critic_optim, self.sheduler = set_optim(self.critic, **PQN.DEFAULT_OPT)
+        self.critic_optim = instantiate(config.pqn.optimizer, params=self.critic.parameters())
+        self.scheduler = instantiate(config.pqn.scheduler, optimizer=self.critic_optim)
        
         self.policy = TextQNetPolicy(copy.deepcopy(state_embed), self.critic).to(torch.get_default_device())
         self.random_policy = TextRandomPolicy().to(torch.get_default_device())
@@ -102,10 +95,7 @@ class PQN(object):
             attention_mask=attention_mask,
             embeds=torch.from_numpy(state.embeds).to(torch.get_default_device()).unsqueeze(0)
         )
-        action, q_values = policy_apply(self.policy, torch_state, a_embeds, torch.tensor(self.alpha), evaluate)
-
-        v1, v2 = self.v_net_target(torch_state, alpha=self.alpha)
-        q_values_target = v1 + v2
+        action, q_values, q_values_target = policy_apply(self.policy, self.v_net_target, torch_state, a_embeds, torch.tensor(self.alpha), evaluate)
 
         if random:
             action, logp, entropy = self.random_policy.forward(state)
@@ -137,16 +127,16 @@ class PQN(object):
                 reward_batch: Tensor, 
                 mask_batch: Tensor):
 
-        # with torch.no_grad():
-        #     v1, v2 = self.v_net_target(state_batch, alpha=self.alpha)
-        #     q_values_batch = v1 + v2
+        with torch.no_grad():
+            v1, v2 = self.v_net_target(state_batch, alpha=self.alpha / 10)
+            q_values_batch = v1 + v2
         
-        last_q = mask_batch[-1] * q_values_batch[-1]
-        lambda_returns = reward_batch[-1] + self.gamma * last_q
+        last_q = mask_batch[-2] * q_values_batch[-1]
+        lambda_returns = reward_batch[-2] + self.gamma * last_q
 
-        targets = []
+        targets = [lambda_returns]
 
-        for t in range(q_values_batch.shape[0] - 2, -1, -1):
+        for t in range(q_values_batch.shape[0] - 3, -1, -1):
             lambda_returns, last_q = self._get_target(lambda_returns, last_q, q_values_batch[t], reward_batch[t], mask_batch[t])
             targets.append(lambda_returns)
 
@@ -177,11 +167,8 @@ class PQN(object):
             state_batch, action_batch, targets)      
 
         self.critic_optim.step()  
+        self.scheduler.step()
         
-        self.sheduler.step()
-        self.alpha = 0.005 * self.sheduler.get_lr()[0] / self.start_lr 
-
-        # self.v_net_target.update(self.critic, self.tau)
-        # self.action_embed_target.update(self.critic, self.tau)
+        self.alpha = self.alpha_start * self.scheduler.get_lr()[0] / self.start_lr 
 
         return qf_loss.item()

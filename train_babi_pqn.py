@@ -15,7 +15,7 @@ import datasets
 from datasets import Dataset, load_dataset, load_from_disk
 import torch
 import sys
-from rl.pqn import PQN, PQNArgs
+from rl.pqn import PQN
 import time
 import numpy as np
 from collections import deque
@@ -27,74 +27,11 @@ from rl.bert_predictor import BertPredictor
 from rl.text_env import TextEnv, TextReplayBuffer
 from tqdm import tqdm
 import torch
+from omegaconf import DictConfig, OmegaConf
+from hydra.utils import instantiate
+from hydra import initialize, compose
+import random
 
-
-torch.set_default_device('cuda:1')
-torch.set_float32_matmul_precision('high')
-
-max_steps = 6
-num_sentences = 50
-task = "qa2_two-supporting-facts"
-noise_train_path = "/home/nazar/pg19-train-with-sentences"
-noise_path_test = "/home/nazar/pg19-test-with-sentences"
-facts_train_path = f"/home/nazar/tasks_1-20_v1-2/en-10k/{task}_train.txt"
-facts_test_path = f"/home/nazar/tasks_1-20_v1-2/en-10k/{task}_test.txt"
-
-writer = SummaryWriter(comment="DQN_" + task)
-
-fact_dataset = QA2FixWrapper(TaskDataset(facts_train_path), add_sentence_idx=True)  
-test_fact_dataset = QA2FixWrapper(TaskDataset(facts_test_path), add_sentence_idx=True)   
-
-noise_dataset = datasets.load_from_disk(noise_path_test)
-noise_sampler = RetrSentenceSampler(noise_dataset)
-
-dataset = RetrNoiseInjectionDataset(
-    task_dataset=fact_dataset,
-    noise_sentence_sampler=noise_sampler,
-    num_sentences=num_sentences
-)
-
-dataset_test = RetrNoiseInjectionDataset(
-    task_dataset=test_fact_dataset,
-    noise_sentence_sampler=noise_sampler,
-    num_sentences=num_sentences
-)
-
-bert_name = "facebook/contriever"
-tokenizer = AutoTokenizer.from_pretrained(bert_name, use_fast=True, revision="main")
-bert_model = AutoModel.from_pretrained(bert_name, revision="main")
-
-# bert_name_2 = "bert-base-uncased"
-# tokenizer_2 = AutoTokenizer.from_pretrained(bert_name_2, use_fast=True, revision="main")
-# bert_model_2 = AutoModel.from_pretrained(bert_name_2, revision="main")
-
-
-action_embed = BertPredictor(bert_model, 6, tokenizer, 768, 256, 1).cuda()
-action_embed_target = BertPredictor(bert_model, 6, tokenizer, 768, 256, 1).cuda()
-
-state_embed = BertPredictor(bert_model, 12, tokenizer, 768, 256, 1).cuda()
-state_embed_target = BertPredictor(bert_model, 12, tokenizer, 768, 256, 1).cuda()
-
-
-agent = PQN(
-    state_embed, action_embed,
-    state_embed_target, action_embed_target
-)
-
-
-env = BabilongEnv( 
-    embedder=agent.action_embed_target, 
-    embed_tokenizer=tokenizer, 
-    dataset=dataset,
-    max_steps=max_steps
-)
-
-env_test = BabilongEnv( 
-    embedder=agent.action_embed_target, 
-    embed_tokenizer=tokenizer, 
-    dataset=dataset_test,
-    max_steps=max_steps
-)
 
 @torch.no_grad()
 def evaluate(env_test, agent):
@@ -110,69 +47,95 @@ def evaluate(env_test, agent):
     return r_sum
 
 
-buffer = TextReplayBuffer(32, tokenizer = tokenizer)
+def load_config(name, overrides=None):
+    with initialize(version_base="1.3", config_path="./configs"):
+        cfg = compose(
+            config_name=name,
+            overrides=overrides if overrides else []
+        )
+        OmegaConf.resolve(cfg)
+        return cfg
+
+
+def set_all_seeds(seed):
+  random.seed(seed)
+  np.random.seed(seed)
+  torch.manual_seed(seed)
+  torch.cuda.manual_seed(seed)
+  torch.backends.cudnn.deterministic = True
+
     
-learning_start = 100
+cfg = load_config(name="training")
+agent_config = cfg.algo
+env_config = cfg.env
 
-step = 0
-R = 0
-entropy_list = []
-for ep_number in tqdm(range(300_000)):
+writer = instantiate(cfg.logger.tensorboard)
 
-    agent.policy.update(agent.critic)
-    agent.v_net_target.update(agent.critic, agent.tau)
-    agent.action_embed_target.update(agent.critic, agent.tau)
+torch.set_default_device(cfg.device)
+torch.set_float32_matmul_precision('high')
+set_all_seeds(cfg.seed)
 
-    s = env.reset()
-    done = False
+agent = PQN(agent_config)
 
-    agent.critic.action_embed.train()
-    a_embeds = env.get_extra_embeds(agent.critic.action_embed)
+tokenizer = agent.critic.state_embed.tokenizer
+env: BabilongEnv = instantiate(env_config.env, embedder=agent.action_embed_target, embed_tokenizer=tokenizer)
+env_test: BabilongEnv = instantiate(env_config.test_env, embedder=agent.action_embed_target, embed_tokenizer=tokenizer)
 
-    agent.policy.train()
-    agent.critic.train()
+buffer = TextReplayBuffer(cfg.buffer_size, tokenizer=tokenizer)
+R = []
+ep_number = 0
+progress_bar = tqdm(range(cfg.steps_count), desc="Training")
 
-    qf_loss, alpha_loss = 0, 0
-    r_sum = 0
-
-    a_all = []
-
-    while not done:
-        step += 1
-        
-        action, _, q_values  = agent.select_action(s, a_embeds, random = step < learning_start)
-        s_next, a_data, reward, done = env.step(action)
-        buffer.add(s, a_data, s_next, a_data, reward, done, 0, q_values.max().cpu().item())
-        
-        s = s_next
-        R += reward
-        r_sum += reward
-        a_all.append(action)
-        
-        if step > learning_start and step % 32 == 0:
-            for _ in range(1):
-                s_batch, a_batch, next_s_batch, _, r_batch, not_done_batch, entropy_batch, q_batch = buffer.ordered_sample(30)
-                qf_loss = agent.update(s_batch, a_batch, next_s_batch, q_batch, r_batch, not_done_batch)
-                writer.add_scalar("qf_loss", qf_loss, step)
+for step in progress_bar:
     
-    writer.add_scalar("r_sum", r_sum, step)
-    
-    if ep_number % 100 == 0 and ep_number > 0:
-        print("R", R / 100, "qf loss", qf_loss)
-        print("alpha", agent.alpha)
-        print(a_all, env.ref_ids)
-        print(env.question, env.sentences[env.ref_ids[0]], env.sentences[env.ref_ids[1]])
-        R = 0
+    if step == 0 or done:
 
-    if ep_number % 100 == 0 and ep_number > 0:
+        agent.policy.update(agent.critic)
+        agent.policy.train()
+        agent.critic.train()
+
+        s = env.reset()
+        r_sum = 0
+
+        a_embeds = env.get_extra_embeds(agent.critic.action_embed)
+
+
+    action, _, q_values  = agent.select_action(s, a_embeds, random=False)
+    s_next, a_data, reward, done = env.step(action)
+    buffer.add(s, a_data, s_next, a_data, reward, done, 0, q_values.max().cpu().item())
+    
+    s = s_next
+    r_sum += reward
+    
+    if step > cfg.learning_start and step % cfg.update_every == 0:
+        for _ in range(1):
+            s_batch, a_batch, next_s_batch, _, r_batch, not_done_batch, entropy_batch, q_batch = buffer.ordered_sample(cfg.batch_size)
+            qf_loss = agent.update(s_batch, a_batch, next_s_batch, q_batch, r_batch, not_done_batch)
+            agent.v_net_target.update(agent.critic, agent.tau)
+            agent.action_embed_target.update(agent.critic, agent.tau)
+    
+    if done:
+        R.append(r_sum)
+        ep_number += 1
+    
+    if step % cfg.eval_interval == 0 and ep_number > 0:
+        
+        writer.add_scalar("R", np.mean(R), step)
+        writer.add_scalar("qf_loss", qf_loss, step)
+
         agent.policy.eval()
         agent.critic.action_embed.eval()
 
-        r_eval = []
-        
-        for _ in range(100):
-            r_eval.append(evaluate(env_test, agent))
-
-        print("eval r_sum:", np.mean(r_eval))
+        r_eval = [evaluate(env_test, agent) for _ in range(cfg.eval_episodes)]
         writer.add_scalar("eval r_sum", np.mean(r_eval), step)
+
+        progress_bar.set_postfix({
+            'reward': np.mean(R),
+            "eval_reward": np.mean(r_eval),
+            'qf_loss': qf_loss,
+            "alpha": agent.alpha,
+            'step': step,
+        })
+
+        R = []
 
