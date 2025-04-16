@@ -36,9 +36,9 @@ def train_step(
 @partial(torch.compile)
 def policy_apply(policy, v_net, state, a_embeds, alpha, return_argmax: bool):
     action, q_values = policy(state, a_embeds, alpha, return_argmax)
-    # v1, v2 = v_net(state, alpha=alpha)
-    # q_values_target = v1 + v2
-    q_values_target = torch.tensor(0.0)
+    v1, v2 = v_net(state, alpha=alpha / 10)
+    q_values_target = v1 + v2
+    # q_values_target = torch.tensor(0.0)
     return action, q_values, q_values_target
 
 
@@ -127,9 +127,9 @@ class PQN(object):
                 reward_batch: Tensor, 
                 mask_batch: Tensor):
 
-        with torch.no_grad():
-            v1, v2 = self.v_net_target(state_batch, alpha=self.alpha / 10)
-            q_values_batch = v1 + v2
+        # with torch.no_grad():
+        #     v1, v2 = self.v_net_target(state_batch, alpha=self.alpha)
+        #     q_values_batch = v1 + v2
         
         last_q = mask_batch[-2] * q_values_batch[-1]
         lambda_returns = reward_batch[-2] + self.gamma * last_q

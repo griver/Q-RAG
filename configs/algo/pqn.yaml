@@ -11,7 +11,7 @@ model:
 
 # PQN Configuration
 pqn:
-  _target_: your_module.PQN
+  _target_: rl.pqn.PQN
   
   state_embed: &bert_predictor
     _target_: rl.bert_predictor.BertPredictor

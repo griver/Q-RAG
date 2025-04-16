@@ -67,7 +67,7 @@ def set_all_seeds(seed):
     
 cfg = load_config(name="training")
 agent_config = cfg.algo
-env_config = cfg.env
+env_config = cfg.envs
 
 writer = instantiate(cfg.logger.tensorboard)
 
@@ -90,6 +90,8 @@ for step in progress_bar:
     
     if step == 0 or done:
 
+        agent.v_net_target.update(agent.critic, agent.tau)
+        agent.action_embed_target.update(agent.critic, agent.tau)
         agent.policy.update(agent.critic)
         agent.policy.train()
         agent.critic.train()
@@ -100,7 +102,7 @@ for step in progress_bar:
         a_embeds = env.get_extra_embeds(agent.critic.action_embed)
 
 
-    action, _, q_values  = agent.select_action(s, a_embeds, random=False)
+    action, _, q_values  = agent.select_action(s, a_embeds, random=(step < cfg.learning_start * 2))
     s_next, a_data, reward, done = env.step(action)
     buffer.add(s, a_data, s_next, a_data, reward, done, 0, q_values.max().cpu().item())
     
@@ -111,8 +113,6 @@ for step in progress_bar:
         for _ in range(1):
             s_batch, a_batch, next_s_batch, _, r_batch, not_done_batch, entropy_batch, q_batch = buffer.ordered_sample(cfg.batch_size)
             qf_loss = agent.update(s_batch, a_batch, next_s_batch, q_batch, r_batch, not_done_batch)
-            agent.v_net_target.update(agent.critic, agent.tau)
-            agent.action_embed_target.update(agent.critic, agent.tau)
     
     if done:
         R.append(r_sum)
