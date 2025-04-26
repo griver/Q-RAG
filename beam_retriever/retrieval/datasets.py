@@ -233,7 +233,8 @@ class HopDataset(Dataset):
 
     def __len__(self):
         return len(self.data)
-    
+
+
 def collate_fn_each_hop(samples):
     if len(samples) == 0:
         return {}

@@ -137,11 +137,11 @@ class RetrievalBabilong(Dataset):
 
         chunks, facts_idx = shuffle(noise_sentences, sample['facts'])
         sample['chunks'] = chunks
-        sample['facts_idx'] = facts_idx
+        sample['facts_idx'] = facts_idx #all babi sentences
 
         if 'references_idx' in sample:
             new_ref_idx = [sample['facts_idx'][old_id] for old_id in sample['references_idx']]
-            sample['references_idx'] = new_ref_idx
+            sample['references_idx'] = new_ref_idx # support facts from babi
 
         return sample
 
