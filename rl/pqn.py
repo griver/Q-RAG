@@ -38,7 +38,6 @@ def policy_apply(policy, v_net, state, a_embeds,  a_embeds_target, alpha, return
     action, q_values = policy(state, a_embeds, alpha, return_argmax)
     v1, v2 = v_net(state, a_embeds_target, alpha=alpha / 10)
     q_values_target = v1 + v2
-    # q_values_target = torch.tensor(0.0)
     return action, q_values, q_values_target
 
 class PQN(object):
@@ -67,6 +66,9 @@ class PQN(object):
         self.v_net_target = TextVNet(state_embed_target, self.critic).to(torch.get_default_device())
         self.action_embed_target = ActionEmbedTarget(action_embed_target, self.critic).to(torch.get_default_device())
 
+        self.state_tokenizer = state_embed.tokenizer
+        self.action_tokenizer = action_embed.tokenizer
+
 
     @torch.no_grad()
     def select_action_batch(self, state: TextMemory, a_embeds: Tensor,  a_embeds_target: Tensor, evaluate=False, random=False):
@@ -91,39 +93,10 @@ class PQN(object):
     def select_action(self, state: TextMemory, a_embeds: Tensor, a_embeds_target: Tensor, evaluate=False, random=False):
 
         state = stack_memory([state], self.critic.action_embed.tokenizer)
-        
-        # input_ids = torch.from_numpy(state.input_ids).to(torch.get_default_device())
-        # attention_mask = torch.from_numpy(state.attention_mask).to(torch.get_default_device())
-        # mask = torch.from_numpy(state.available_mask).to(torch.get_default_device()).unsqueeze(0)
-        # a_embeds, a_embeds_target = a_embeds.unsqueeze(0), a_embeds_target.unsqueeze(0)
-
         a_embeds = pad_sequence_power_2([a_embeds], padding_value=0.0, batch_first=True)
         a_embeds_target = pad_sequence_power_2([a_embeds_target], padding_value=0.0, batch_first=True)
-
-        # input_ids = pad_sequence_power_2(
-        #     [input_ids], 
-        #     batch_first=True, 
-        #     padding_value=0)
-        
-        # attention_mask = pad_sequence_power_2(
-        #     [attention_mask], 
-        #     batch_first=True, 
-        #     padding_value=0)
-        
-        torch_state = TextMemory(
-            item_ids=None,
-            available_ids=None,
-            available_mask=state.available_mask,
-            text=None,
-            input_ids=state.input_ids,
-            attention_mask=state.attention_mask,
-        )
-        action, q_values, q_values_target = policy_apply(self.policy, self.v_net_target, torch_state, a_embeds,  a_embeds_target, torch.tensor(self.alpha), evaluate)
-
-        if random:
-            action = self.random_policy.forward(state)
-            
-        return action.squeeze().item(), q_values.squeeze(), q_values_target.squeeze()
+                
+        return self.select_action_batch(state, a_embeds, a_embeds_target, evaluate, random)
         
     
     @torch.no_grad()
@@ -148,10 +121,6 @@ class PQN(object):
                 q_values_batch: Tensor,
                 reward_batch: Tensor, 
                 mask_batch: Tensor):
-
-        # with torch.no_grad():
-        #     v1, v2 = self.v_net_target(state_batch, alpha=self.alpha)
-        #     q_values_batch = v1 + v2
         
         last_q = mask_batch[-2] * q_values_batch[-1]
         lambda_returns = reward_batch[-2] + self.gamma * last_q
@@ -192,4 +161,18 @@ class PQN(object):
         
         self.alpha = self.alpha_start * self.scheduler.get_lr()[0] / self.start_lr 
 
+        self.v_net_target.update(self.critic, self.tau)
+        self.action_embed_target.update(self.critic, self.tau)
+        self.policy.update(self.critic)
+
         return qf_loss.item()
+    
+    def train(self):
+        self.policy.train()
+        self.critic.train()
+
+    def eval(self):
+        self.policy.eval()
+        self.critic.action_embed.eval()
+        # self.v_net_target.train()
+        # self.action_embed_target.train()

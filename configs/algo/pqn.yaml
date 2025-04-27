@@ -48,7 +48,7 @@ pqn:
     
   scheduler:
     _target_: rl.sarsa.WarmupLinearScheduler
-    total: 40000
+    total: ${steps_count}
     ratio: 0.0
     warmup: 1000
 

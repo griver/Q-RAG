@@ -27,23 +27,16 @@ class GroundTruthReward:
 class BabilongEnv(TextEnv):
 
     def __init__(self,
-                #  embedder,
-                 embed_tokenizer: Union[PreTrainedTokenizer, PreTrainedTokenizerFast],
                  dataset,
                  max_steps = 3,
-                 max_embed_length = 500,
-                 action_embed_length = 64,
                  reward_model = GroundTruthReward()):
         
         super().__init__()
 
         self.dataset = dataset
         self.max_steps = max_steps
-        self.max_embed_length = max_embed_length
-        self.action_embed_length = action_embed_length
-
-        # self.embedder = embedder
-        self.embed_tokenizer = embed_tokenizer
+        # self.max_embed_length = max_embed_length
+        # self.action_embed_length = action_embed_length
         self.reward_model = reward_model
 
         self.references = None
@@ -54,9 +47,7 @@ class BabilongEnv(TextEnv):
         self.num_steps = 0
 
     def copy(self):
-        return BabilongEnv( 
-                           self.embed_tokenizer, 
-                           self.dataset, 
+        return BabilongEnv(self.dataset, 
                            self.max_steps,
                            self.max_embed_length,
                            self.action_embed_length,
@@ -120,16 +111,5 @@ class BabilongEnv(TextEnv):
         return self.embedder.device
 
     def _reward(self, action):
-
         return self.reward_model.reward(self, action)
 
-        # if action in self.ref_ids:
-        #     self.refs_found.append(action)
-        
-        # if len(self.refs_found) == len(self.ref_ids):
-        #     return 1.0
-        # else:
-        #     return 0.0
-
-    def close(self):
-        del self.sent_embeds

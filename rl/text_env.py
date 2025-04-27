@@ -13,6 +13,10 @@ from functools import reduce
 
 
 os.environ['TOKENIZERS_PARALLELISM'] = 'true'
+MAX_TOKEN_LENGTH = {
+    "state": 512,
+    "action": 64
+}
 
 TextMemory = namedtuple("TextMemory", ["item_ids", "available_ids", "available_mask", "input_ids", "attention_mask", "text"]) 
 TextMemoryItem = namedtuple("TextMemoryItem", ["index", "input_ids", "attention_mask", "text"]) 
@@ -33,7 +37,7 @@ def pad_sequence_power_2(seq_list: List[Tensor], padding_value, batch_first=True
     return pad_2
 
 
-def stack_memory(memory: List[TextMemory], tokenizer: PreTrainedTokenizer, max_length=512, device=None):
+def stack_memory(memory: List[TextMemory], tokenizer: PreTrainedTokenizer, max_length=MAX_TOKEN_LENGTH["state"], device=None):
 
     if device is None:
         device = torch.get_default_device()
@@ -53,11 +57,6 @@ def stack_memory(memory: List[TextMemory], tokenizer: PreTrainedTokenizer, max_l
         batch_first=True, 
         padding_value=0)
     
-    # embeds = pad_sequence(
-    #     [torch.from_numpy(si.embeds) for si in memory], 
-    #     padding_value=0.0,
-    #     batch_first=True)
-    
     available_mask = pad_sequence_power_2(
         [torch.from_numpy(si.available_mask) for si in memory], 
         batch_first=True, padding_value=False)
@@ -68,14 +67,13 @@ def stack_memory(memory: List[TextMemory], tokenizer: PreTrainedTokenizer, max_l
         available_mask=available_mask.to(device),
         input_ids=input_ids.to(device),
         attention_mask=attention_mask.to(device),
-        text=[si.text for si in memory],
-        # embeds=embeds.to(device).type(torch.float32)
+        text=text_array,
     )
     
     return s_memory
     
 
-def stack_actions(actions: List[TextMemoryItem], tokenizer, max_length=64, device=None):
+def stack_actions(actions: List[TextMemoryItem], tokenizer, max_length=MAX_TOKEN_LENGTH["action"], device=None):
 
     if device is None:
         device = torch.get_default_device()
@@ -93,16 +91,6 @@ def stack_actions(actions: List[TextMemoryItem], tokenizer, max_length=64, devic
         [torch.IntTensor(am) for am in tokens["attention_mask"]], 
         batch_first=True, 
         padding_value=0)
-
-    # input_ids = pad_sequence_power_2(
-    #     [torch.from_numpy(si.input_ids) for si in actions], 
-    #     batch_first=True, 
-    #     padding_value=int(tokenizer.pad_token_id))
-    
-    # attention_mask = pad_sequence_power_2(
-    #     [torch.from_numpy(si.attention_mask) for si in actions], 
-    #     batch_first=True, 
-    #     padding_value=0)
     
     a_block = TextMemoryItem(
         index=[si.index for si in actions],
@@ -117,41 +105,10 @@ def stack_actions(actions: List[TextMemoryItem], tokenizer, max_length=64, devic
 class TextEnv:
 
     separator = " [SEP] "
-    embedder: nn.Module
-    # embed_tokenizer: Union[PreTrainedTokenizer, PreTrainedTokenizerFast]
-    max_embed_length = 500
-    action_embed_length = 64
-    max_batch_size = 128
+    max_embed_length = MAX_TOKEN_LENGTH["state"]
+    action_embed_length = MAX_TOKEN_LENGTH["action"]
+    max_batch_size = 256
 
-    # def tokenize(self, text: str, max_len=None) -> np.ndarray:
-    #     if max_len is None:
-    #         max_len = self.max_embed_length
-    #     tokens = self.embed_tokenizer(text, truncation=True, max_length=max_len)
-    #     return {k: np.asarray(v) for k, v in tokens.items()}
-    
-    # def tokenize_list(self, text_array: List[str]) -> np.ndarray:
-    #     tokens = self.embed_tokenizer(text_array, truncation=True, max_length=self.action_embed_length)
-    #     return [{k: np.asarray(v[i]) for k, v in tokens.items()} for i in range(len(text_array))]
-
-    # @torch.no_grad()
-    # def get_embeds(self, sentences: List[str]) -> np.ndarray:
-    #     batch = self.embed_tokenizer(
-    #         list(sentences), 
-    #         padding=True, 
-    #         truncation=True, 
-    #         return_tensors="pt", 
-    #         max_length=self.action_embed_length
-    #     ).to(torch.get_default_device())
-
-    #     B = batch["input_ids"].shape[0]
-    #     assert batch["input_ids"].shape[1] <= 500
-    #     embeds = []
-    #     for i in range(0, B, self.max_batch_size):
-    #         subbatch = {k:v[i:i+self.max_batch_size] for k, v in batch.items()}
-    #         embeds.append(self.embedder(**subbatch).to("cpu"))
-
-    #     return torch.cat(embeds, dim=0).numpy()
-    
     @torch.no_grad()
     def get_extra_embeds(self, embedder: nn.Module, embedder_target: nn.Module) -> np.ndarray:
         batch = self.embed_tokenizer(
@@ -229,17 +186,6 @@ class TextEnv:
 
         is_empty = len(self.items_dict) <= 1
         new_text = action_text if is_empty else self.separator.join([it.text for it in self.items_dict])
-        
-        # if is_empty: 
-        #     input_ids = action_tokens["input_ids"].copy()
-        #     attention_mask = action_tokens["attention_mask"].copy()
-        # else:
-        #     input_ids = np.concatenate(
-        #         [self.memory.input_ids, np.asarray([self.embed_tokenizer.sep_token_id]), action_tokens["input_ids"]]
-        #     )
-        #     attention_mask = np.concatenate(
-        #         [self.memory.attention_mask, np.ones(1, dtype=np.int32), action_tokens["attention_mask"]]
-        #     )
 
         available_mask = self.memory.available_mask.copy()
         available_mask[action] = False
@@ -250,8 +196,7 @@ class TextEnv:
             available_mask=available_mask,
             text=new_text,
             input_ids=None,
-            attention_mask=None,
-            # embeds=self.memory.embeds
+            attention_mask=None
         )
 
         done = len(self.memory.item_ids) >= len(self.all_texts)
