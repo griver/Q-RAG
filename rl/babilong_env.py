@@ -27,7 +27,7 @@ class GroundTruthReward:
 class BabilongEnv(TextEnv):
 
     def __init__(self,
-                 embedder,
+                #  embedder,
                  embed_tokenizer: Union[PreTrainedTokenizer, PreTrainedTokenizerFast],
                  dataset,
                  max_steps = 3,
@@ -42,7 +42,7 @@ class BabilongEnv(TextEnv):
         self.max_embed_length = max_embed_length
         self.action_embed_length = action_embed_length
 
-        self.embedder = embedder
+        # self.embedder = embedder
         self.embed_tokenizer = embed_tokenizer
         self.reward_model = reward_model
 
@@ -52,6 +52,15 @@ class BabilongEnv(TextEnv):
         self.facts_ids = None
        
         self.num_steps = 0
+
+    def copy(self):
+        return BabilongEnv( 
+                           self.embed_tokenizer, 
+                           self.dataset, 
+                           self.max_steps,
+                           self.max_embed_length,
+                           self.action_embed_length,
+                           self.reward_model)
 
     def _init_from_sample(self, sample):
 
@@ -89,7 +98,7 @@ class BabilongEnv(TextEnv):
         self.refs_found = []
         self.text_state = []
         
-        return super().reset(self.question, self.sentences)
+        return super()._reset(self.question, self.sentences)
    
 
     def step(self, action: int):
@@ -97,7 +106,7 @@ class BabilongEnv(TextEnv):
 
         done = self.num_steps >= self.max_steps
         
-        text_memory, text_item, text_done = super().step(action)
+        text_memory, text_item, text_done = super()._step(action)
         self.text_state.append(self.sentences[action])
 
         r = self._reward(action)

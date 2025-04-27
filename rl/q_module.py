@@ -99,27 +99,32 @@ class TextQNetPolicy(nn.Module):
 
     @torch.no_grad()
     def forward(self, s: TextMemory, a_embeds: Tensor, alpha: float, return_arg_max=False):
-        # assert alpha > -1e-8
         
-        a_embeds = a_embeds.unsqueeze(0)
+        # a_embeds = a_embeds.unsqueeze(1)
+        # print("a_embeds", a_embeds.shape)
 
         s_embed = self.state_embed(input_ids=s.input_ids, attention_mask=s.attention_mask)
         s_embed = s_embed.unsqueeze(1)
         
-        logits = (s_embed * a_embeds).sum(-1) 
+        logits = (s_embed * a_embeds).sum(-1).squeeze(-1) 
+        # print("logits", logits.shape)
         logits[s.available_mask == False] = logits.min() - 1
 
         top_ids = torch.topk(logits, self.top_k_actions, dim=1).indices
         top_mask = torch.zeros_like(logits > 0).scatter_(1, top_ids, True)
 
+        # print("top_mask", top_mask.shape)
+
         if return_arg_max:
             return torch.argmax(logits, -1), logits
 
-        probs = ((logits - logits.max()) / alpha).softmax(-1)
+        probs = ((logits - logits.max(-1, keepdim=True).values) / alpha).softmax(-1)
         probs[(s.available_mask & top_mask) == False] = 0
-        probs = probs / probs.sum(-1)
+        probs = probs / probs.sum(-1, keepdim=True)
         dist = torch.distributions.Categorical(probs = probs)
         action = dist.sample()
+
+        # print("action", action.shape)
 
         return action, logits
     
@@ -130,14 +135,14 @@ class TextRandomPolicy(nn.Module):
     @torch.no_grad()
     def forward(self, s: TextMemory):
 
-        mask = torch.from_numpy(s.available_mask).cuda()
+        mask = s.available_mask
         
-        probs = (torch.ones(mask.shape[0], device=mask.device)).softmax(-1)
+        probs = (torch.ones(mask.shape[0], mask.shape[1], device=mask.device)).softmax(-1)
         probs[mask == False] = 0
         dist = torch.distributions.Categorical(probs = probs)
         action = dist.sample()
 
-        return action, dist.log_prob(action), dist.entropy()
+        return action
 
 
 class TextVNet(nn.Module):
@@ -158,12 +163,12 @@ class TextVNet(nn.Module):
         soft_update(self.state_embed, q_net.state_embed, decay)
 
     @torch.no_grad()
-    def forward(self, s: TextMemory, alpha: float):
+    def forward(self, s: TextMemory, a_embeds_target: Tensor, alpha: float):
         # assert alpha > 1e-8
 
         s_embed = self.state_embed(input_ids=s.input_ids, attention_mask=s.attention_mask)
         s_embed = s_embed.unsqueeze(1)
-        a_embeds: Tensor = s.embeds
+        a_embeds: Tensor = a_embeds_target
         
         # logits = (s_embed * a_embeds).sum(-1) 
         D = s_embed.shape[-1] // 2

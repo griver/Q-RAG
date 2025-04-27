@@ -15,17 +15,17 @@ class ReplayBuffer(object):
         self.next_action = [None,]*max_size
         self.q_values = np.zeros((max_size, 1))
         self.reward = np.zeros((max_size, 1))
-        self.entropy = np.zeros((max_size, 1))
+        # self.entropy = np.zeros((max_size, 1))
         self.not_done = np.zeros((max_size, 1))
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    def add(self, state, action, next_state, next_action, reward, done, entropy, max_q):
+    def add(self, state, action, next_state, next_action, reward, done, max_q):
         self.state[self.ptr] = state
         self.action[self.ptr] = action
         self.next_state[self.ptr] = next_state
         self.next_action[self.ptr] = next_action
         self.reward[self.ptr] = reward
-        self.entropy[self.ptr] = entropy
+        # self.entropy[self.ptr] = entropy
         self.q_values[self.ptr] = max_q
         self.not_done[self.ptr] = 1. - int(done)
         self.ptr = (self.ptr + 1) % self.max_size
@@ -52,8 +52,8 @@ class ReplayBuffer(object):
         next_a = [self.next_action[i] for i in ind]
         r = self.reward[ind]
         not_done = self.not_done[ind]
-        entropy = self.entropy[ind]
-        return s, a, r, next_s, next_a, not_done, entropy
+        # entropy = self.entropy[ind]
+        return s, a, r, next_s, next_a, not_done
     
     def ordered_sample(self, batch_size):
         start = np.random.randint(0, self.size - batch_size + 1)
@@ -66,5 +66,5 @@ class ReplayBuffer(object):
         r = self.reward[ind]
         q = self.q_values[ind]
         not_done = self.not_done[ind]
-        entropy = self.entropy[ind]
-        return s, a, r, next_s, next_a, not_done, entropy, q
+        # entropy = self.entropy[ind]
+        return s, a, r, next_s, next_a, not_done, q
