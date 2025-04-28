@@ -49,8 +49,6 @@ class BabilongEnv(TextEnv):
     def copy(self):
         return BabilongEnv(self.dataset, 
                            self.max_steps,
-                           self.max_embed_length,
-                           self.action_embed_length,
                            self.reward_model)
 
     def _init_from_sample(self, sample):

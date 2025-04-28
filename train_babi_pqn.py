@@ -25,7 +25,7 @@ import random
 def evaluate(env_test, agent):
     s_t = env_test.reset()
     done_t = False
-    a_embeds_t, a_embeds_target_t = env_test.get_extra_embeds(agent.critic.action_embed, agent.action_embed_target)
+    a_embeds_t, a_embeds_target_t = env_test.get_extra_embeds(agent.action_tokenizer, agent.critic.action_embed, agent.action_embed_target)
     r_sum_t = 0
     while not done_t:
         action_t, _, _ = agent.select_action(s_t, a_embeds_t, a_embeds_target_t, random=False, evaluate=True)

@@ -11,6 +11,6 @@ steps_count: 50_000
 batch_size: 32
 eval_interval: 20
 eval_episodes: 100
-envs_parallel: 2
+envs_parallel: 3
 max_state_length: 512
 max_action_length: 64

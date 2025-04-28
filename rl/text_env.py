@@ -100,6 +100,26 @@ def stack_actions(actions: List[TextMemoryItem], tokenizer, max_length=MAX_TOKEN
     )
     
     return a_block
+
+
+def stack_text_list(text_array: List[str], tokenizer, max_length=MAX_TOKEN_LENGTH["action"], device=None):
+
+    if device is None:
+        device = torch.get_default_device()
+
+    tokens = tokenizer(text_array, truncation=True, max_length=max_length)
+    
+    input_ids = pad_sequence_power_2(
+        [torch.IntTensor(ii) for ii in tokens["input_ids"]], 
+        batch_first=True, 
+        padding_value=int(tokenizer.pad_token_id))
+    
+    attention_mask = pad_sequence_power_2(
+        [torch.IntTensor(am) for am in tokens["attention_mask"]], 
+        batch_first=True, 
+        padding_value=0)
+    
+    return {"input_ids": input_ids.to(device), "attention_mask": attention_mask.to(device)}
     
 
 class TextEnv:
@@ -110,15 +130,8 @@ class TextEnv:
     max_batch_size = 256
 
     @torch.no_grad()
-    def get_extra_embeds(self, embedder: nn.Module, embedder_target: nn.Module) -> np.ndarray:
-        batch = self.embed_tokenizer(
-            list(self.all_texts), 
-            padding=True, 
-            truncation=True, 
-            return_tensors="pt", 
-            max_length=self.action_embed_length
-        ).to(torch.get_default_device())
-
+    def get_extra_embeds(self, tokenizer, embedder: nn.Module, embedder_target: nn.Module) -> np.ndarray:
+        batch = stack_text_list(list(self.all_texts), tokenizer, max_length=self.action_embed_length)
         embeds, embeds_target = embedder(**batch), embedder_target(**batch)
 
         return embeds, embeds_target
@@ -128,13 +141,13 @@ class TextEnv:
     @abstractmethod
     def step(self, action: int) -> Tuple[TextMemory, TextMemoryItem, float, bool]: pass
 
-    def step_and_maybe_reset(self, action: int, embedder: nn.Module, embedder_target: nn.Module):
+    def step_and_maybe_reset(self, action: int, tokenizer, embedder: nn.Module, embedder_target: nn.Module):
         s_next, a, r, done = self.step(action)
         new_state = s_next
         embeds = None
         if done:
             new_state = self.reset()
-            embeds = self.get_extra_embeds(embedder, embedder_target)
+            embeds = self.get_extra_embeds(tokenizer, embedder, embedder_target)
         
         return Transition(
             state=None,
@@ -149,7 +162,7 @@ class TextEnv:
 
     def _reset(self, question: str, text_array: List[str]) -> TextMemory:
         self.all_texts = text_array
-
+        self.question = question
         self.items_dict = SortedList(key=lambda memory_item: memory_item.index)
 
         # tokens = self.tokenize(question, self.action_embed_length)
@@ -183,9 +196,7 @@ class TextEnv:
         )
 
         self.items_dict.add(memory_item)
-
-        is_empty = len(self.items_dict) <= 1
-        new_text = action_text if is_empty else self.separator.join([it.text for it in self.items_dict])
+        new_text = self.separator.join([self.question] + [it.text for it in self.items_dict])
 
         available_mask = self.memory.available_mask.copy()
         available_mask[action] = False
@@ -276,7 +287,7 @@ class ParallelTextEnv:
             new_state_seq = []
 
             for i, si, ai, qi, env in zip(env_index, s_seq, action, q_values, self.text_envs):
-                transition = env.step_and_maybe_reset(ai, agent.critic.action_embed, agent.action_embed_target)
+                transition = env.step_and_maybe_reset(ai, self.action_tokenizer, agent.critic.action_embed, agent.action_embed_target)
                 transition = transition._replace(state=si, q_values=qi)
                 self.tmp_data[i].append(transition)
                 new_state_seq.append(transition.new_state)
@@ -321,18 +332,25 @@ class ParallelTextEnv:
     @torch.no_grad()
     def get_extra_embeds(self, embedder: nn.Module, embedder_target: nn.Module) -> np.ndarray:
 
+        # all_texts = reduce(lambda e1, e2: e1 + e2, [list(env.all_texts) for env in self.text_envs])
+        # lens = [len(env.all_texts) for env in self.text_envs]
+
+        # batch = stack_text_list(all_texts, self.action_tokenizer)
+        # all_embeds, all_embeds_target = embedder(**batch), embedder_target(**batch)
+        # embeds, embeds_target = torch.split(all_embeds, lens), torch.split(all_embeds_target, lens)
+
         embeds = []
         embeds_target = []
 
         for e in self.text_envs:
-            e1, e2 = e.get_extra_embeds(embedder, embedder_target)
+            e1, e2 = e.get_extra_embeds(self.action_tokenizer, embedder, embedder_target)
             embeds.append(e1)
             embeds_target.append(e2)
 
         # embeds = pad_sequence_power_2(embeds, padding_value=0.0, batch_first=True)
         # embeds_target = pad_sequence_power_2(embeds_target, padding_value=0.0, batch_first=True)
 
-        return embeds, embeds_target
+        return list(embeds), list(embeds_target)
 
 
 class TextReplayBuffer(ReplayBuffer):
