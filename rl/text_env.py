@@ -62,7 +62,7 @@ class TextEnv:
         return torch.cat(embeds, dim=0).numpy()
     
     @torch.no_grad()
-    def get_extra_embeds(self, embedder: nn.Module) -> np.ndarray:
+    def get_extra_embeds(self, embedder: nn.Module, positional_embedder:nn.Module=None) -> np.ndarray:
         batch = self.embed_tokenizer(
             list(self.all_texts), 
             padding=True, 

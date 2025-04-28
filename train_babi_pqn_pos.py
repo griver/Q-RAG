@@ -16,7 +16,9 @@ from omegaconf import OmegaConf
 from hydra.utils import instantiate
 from hydra import initialize, compose
 import random
+from envs.babilong.retrieval_babilong import RetrievalBabiLong
 
+print(RetrievalBabiLong)
 
 @torch.no_grad()
 def evaluate(env_test, agent):
@@ -39,8 +41,18 @@ def load_config(name, overrides=None):
             overrides=overrides if overrides else []
         )
         OmegaConf.resolve(cfg)
+        cfg = prepare_config(cfg)
         return cfg
 
+
+def prepare_config(cfg):
+    """
+    modifies config for parameters that should depend on each other
+    """
+    enumerate_facts = (cfg.positional_coding == 'enum') #TODO: add version that enumerate all chunks
+    cfg.envs.env.dataset.task_dataset.add_sentence_idx = enumerate_facts
+    cfg.envs.test_env.dataset.task_dataset.add_sentence_idx = enumerate_facts
+    return cfg
 
 def set_all_seeds(seed):
   random.seed(seed)
@@ -50,7 +62,9 @@ def set_all_seeds(seed):
   torch.backends.cudnn.deterministic = True
 
     
-cfg = load_config(name="training")
+cfg = load_config(name="training_pos")
+#TODO: add shuffling between babi facts and noise!
+
 agent_config = cfg.algo
 env_config = cfg.envs
 

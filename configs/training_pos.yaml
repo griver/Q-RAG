@@ -1,6 +1,6 @@
 defaults:
   - envs: babilong 
-  - algo: pqn
+  - algo: pqn_pos
   - logger: tb
   - _self_
 
@@ -14,4 +14,4 @@ batch_size: 16
 log_interval: 100
 eval_interval: 1000
 eval_episodes: 100
-
+positional_coding: enum #options: rope | enum | none

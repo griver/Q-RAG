@@ -80,3 +80,34 @@ class BertPredictor(nn.Module):
             prediction  = (out * mask).sum(1) / mask.sum(1)
 
         return prediction / 10
+
+
+import rotary_embedding_torch
+
+
+class EmbedderWithPosEncoding(BertPredictor):
+    def __init__(self, bert: RobertaModel, num_hidden_layers, tokenizer, model_dim, output_size, n_output, positional_coding=None) -> None:
+        super().__init__(bert, num_hidden_layers, tokenizer, model_dim, output_size, n_output)
+        self.rotary_emb = None
+
+        if positional_coding == 'rope':
+            #add positional shift to first part of the embeds
+            self.rotary_emb = rotary_embedding_torch.RotaryEmbedding(dim=model_dim // 2)
+
+
+    def forward(self, input_ids, attention_mask, *args, **kw):
+        embeds = super().forward(input_ids, attention_mask, *args, **kw)
+        if self.rotary_emb is not None:
+            #Add positional embeddings to chunk embeds
+            #This version only works  for a contiguous set of ids, i.e. [n, n+1, n+2, ... n+T-1]
+            offset = kw.get('positional_offset', None)
+
+            if offset is not None:
+                T, D = embeds.shape
+                assert T == 1, 'if you need to embed batch of chunks with custom positional indices, then embed them one by one'
+                # TODO: implement version for custom set of ids, if needed
+
+            offset = 0 if offset is None else offset
+            embeds = self.rotary_emb.rotate_queries_or_keys(embeds, seq_dim=0, offset=offset)
+
+        return embeds

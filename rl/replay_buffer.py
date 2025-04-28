@@ -68,3 +68,4 @@ class ReplayBuffer(object):
         not_done = self.not_done[ind]
         entropy = self.entropy[ind]
         return s, a, r, next_s, next_a, not_done, entropy, q
+

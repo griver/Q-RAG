@@ -1,9 +1,7 @@
 import torch
-import numpy as np
-from rl.retrieval_env import RetrievalEnv, RetrievalPolicy, TopKExhaustiveSearch
-from babilong_utils import NoiseInjectionDataset, sum_lengths
+from envs.babilong.retrieval_env import RetrievalEnv
+from envs.babilong.babilong_utils import NoiseInjectionDataset, sum_lengths
 from torch.utils.data import Dataset
-import sys
 # contriever_path = "/home/griver/projects/ml/nlp/contriever"
 # if contriever_path not in sys.path:
 #     sys.path.append(contriever_path)
