@@ -1,10 +1,11 @@
 from transformers import AutoTokenizer
 from rl_retrieval.utils import all_facts_found
-from rl_retrieval.reward_model import GroundTruthReward
+from rl_retrieval.feedback import GroundTruthFeedback
 from rl_retrieval.retrieval_envs.qa_retrieval_env import QARetrievalEnv, SimpleEnvAdapter
 from rl_retrieval.policy import RNDPolicy, OraclePolicy
 from rl_retrieval.utils import all_facts_found
 from dataloaders.localsets.musique import RetrievalMusique
+from dataloaders.localsets.hotpotqa import RetrievalHotPotQA
 from dataloaders.globalset import PATHS
 import numpy as np
 
@@ -15,18 +16,22 @@ if __name__ == '__main__':
     num_samples = 1
     tokenizer = AutoTokenizer.from_pretrained('microsoft/deberta-v3-base')
     #tokenizer here are used only to estimate length of samples in datasets
-    dataset = RetrievalMusique(
-        path=PATHS['musique'], tokenizer=tokenizer, length=-1,
+
+    dataset = RetrievalHotPotQA(
+        path=PATHS['hotpotqa'], tokenizer=tokenizer, length=-1,
         min_context_len=0, max_context_len=1e7,
         type='any', anno_type='any', split=split, seed=seed
     )
+    # dataset = RetrievalMusique(
+    #     path=PATHS['hotpotqa'], tokenizer=tokenizer, length=-1,
+    #     min_context_len=0, max_context_len=1e7,
+    #     type='any', anno_type='any', split=split, seed=seed
+    # )
 
     dataset = SimpleEnvAdapter(dataset)
-    reward_model = None
-    termination_func = None
+    feedback_model = GroundTruthFeedback(per_fact_reward=0.05, completion_reward=1.)
 
-    reward_model = GroundTruthReward(per_fact_reward=0.05, completion_reward=1.)
-    env = QARetrievalEnv(reward_model, termination_func=all_facts_found, max_steps=4)
+    env = QARetrievalEnv(feedback_model, max_steps=4)
     terminated = truncated = False
     states = []
     rewards = []

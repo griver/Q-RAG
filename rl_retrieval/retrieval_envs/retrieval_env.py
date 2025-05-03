@@ -6,18 +6,23 @@ from abc import ABC, abstractmethod
 
 class ARetrievalEnv(Env):
 
-    def __init__(self, reward_model, termination_func, max_steps):
+    def __init__(
+            self,
+            feedback_model,
+            #termination_func,
+            max_steps
+    ):
         """
         :param dataset: QA dataset
-        :param reward_model: an instance that will return reward given current state
+        :param feedback_model: an instance that will return reward given current state
         :param max_steps: maximum number of retrieval steps in episode
         :param termination_func: determines if episode is done before reaching max_steps
         :param top_k: number of chunks to return per retrieval step
         """
         super().__init__()
-        self.reward_model = reward_model
+        self.fb_model = feedback_model
         self.max_steps = max_steps
-        self.termination_func = termination_func
+        #self.termination_func = termination_func
         #self.top_k = top_k
         self.state = None
         self.cur_step = 0
@@ -40,7 +45,7 @@ class ARetrievalEnv(Env):
         self._init_from_sample(sample)
         obs = self._make_obs()
         info = {}
-        self.reward_model.reset(obs, info)
+        self.fb_model.reset(obs, info)
         return obs, info
 
     @abstractmethod

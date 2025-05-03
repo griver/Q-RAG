@@ -12,8 +12,13 @@ from transformers import AutoTokenizer
 
 class QARetrievalEnv(ARetrievalEnv):
 
-    def __init__(self, reward_model, termination_func: Callable, max_steps: int):
-        super().__init__(reward_model, termination_func, max_steps)
+    def __init__(
+            self,
+            feedback_model,
+            #termination_func: Callable,
+            max_steps: int
+    ):
+        super().__init__(feedback_model, max_steps) #termination_func, max_steps)
         self.chunks = []
         self.chunk_embeds = []
         self.sf_idx = []
@@ -51,6 +56,7 @@ class QARetrievalEnv(ARetrievalEnv):
         self.last_action = action.copy()
 
         obs = self._make_obs()
+        self.cur_step += 1
 
         info = {
             "sf_idx": self.sf_idx.copy(),
@@ -60,14 +66,11 @@ class QARetrievalEnv(ARetrievalEnv):
             "last_action": self.last_action.copy()
         }
 
-        reward = self.reward_model.reward(obs, info)
-
-        self.cur_step += 1
-
-        terminated = self.termination_func(obs, info)
         truncated = self.cur_step >= self.max_steps
+        feedback = self.fb_model.get_feedback(obs, info, truncated)
+        #reward = self.fb_model.reward(obs, info, is_final=truncated or terminated)
 
-        return obs, reward, terminated, truncated, info
+        return obs, feedback['reward'], feedback['terminated'], truncated, info
 
     def reset(self, sample, seed: int | None = None) -> tuple[ObsType, dict[str, Any]]:
         obs, info = super().reset(sample, seed)

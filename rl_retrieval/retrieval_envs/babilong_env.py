@@ -6,7 +6,7 @@ from transformers import AutoTokenizer
 
 from dataloaders.localsets.babilong.babilong_sequence import TaskDataset, SentenceSampler, BabiLong
 from dataloaders.localsets.babilong.babilong_retrieve import RetrSentenceSampler, RetrievalBabilong
-from rl_retrieval.reward_model import GroundTruthReward
+from rl_retrieval.feedback import GroundTruthFeedback
 
 def shuffle(noise, facts):
     N_facts = len(facts)
@@ -224,7 +224,7 @@ def evaluate(dataset, policy, retriever, retr_tokenizer, lm_tokenizer, max_steps
         sample = dataset[i]
         env = BabilongEnv(
             sample, retriever, retr_tokenizer,
-            lm_tokenizer, GroundTruthReward(), max_steps=max_steps
+            lm_tokenizer, GroundTruthFeedback(), max_steps=max_steps
         )
         s = env.reset()
         done = False
@@ -252,7 +252,7 @@ def play(policy, sample):
         sample,
         embedder,
         embed_tokenizer,
-        reward_model=GroundTruthReward(),
+        reward_model=GroundTruthFeedback(),
         max_steps=3
     )
     s = env.reset()
