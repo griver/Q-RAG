@@ -40,7 +40,7 @@ if __name__ == '__main__':
         print(f"Question: {obs['question']}?")
         print('Relevant chunks:')
         for j in info['sf_idx']:
-            print(f'Chunk #{j}:\n {obs['chunks'][j]}\n')
+            print(f"Chunk #{j}:\n {obs['chunks'][j]}\n")
 
 
         while not (terminated or truncated):
