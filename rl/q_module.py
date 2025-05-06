@@ -43,7 +43,7 @@ class TextQNet(nn.Module):
     def forward(self, s: TextMemory, a: TextMemoryItem): 
         s_embed = self.state_embed(input_ids=s.input_ids, attention_mask=s.attention_mask)
         # self.action_embed.eval()
-        a_embed = self.action_embed(input_ids=a.input_ids, attention_mask=a.attention_mask)
+        a_embed = self.action_embed(input_ids=a.input_ids, attention_mask=a.attention_mask, positions=a.index)
         
         D = s_embed.shape[-1] // 2
         logits_1 = (s_embed[:, :D] * a_embed[:, :D]).sum(-1) 

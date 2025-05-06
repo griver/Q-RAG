@@ -28,10 +28,25 @@ pqn:
     model_dim: ${algo.model.predictor.input_dim}
     output_size: ${algo.model.predictor.hidden_dim}
     n_output: ${algo.model.predictor.output_dim}
+
+  action_embed: &pos_embed
+    _target_: rl.bert_predictor.EmbedderWithPosEncoding
+    bert:
+      _target_: transformers.AutoModel.from_pretrained
+      pretrained_model_name_or_path: ${algo.model.bert_name}
+      revision: ${algo.model.revision}
+    num_hidden_layers: ${algo.model.predictor.num_layers}
+    tokenizer:
+      _target_: transformers.AutoTokenizer.from_pretrained
+      pretrained_model_name_or_path: ${algo.model.bert_name}
+      revision: ${algo.model.revision}
+      use_fast: ${algo.model.use_fast_tokenizer}
+    model_dim: ${algo.model.predictor.input_dim}
+    output_size: ${algo.model.predictor.hidden_dim}
+    n_output: ${algo.model.predictor.output_dim}
   
-  action_embed: *bert_predictor
   state_embed_target: *bert_predictor
-  action_embed_target: *bert_predictor
+  action_embed_target: *pos_embed
 
   hyperparams:
     gamma: 0.99

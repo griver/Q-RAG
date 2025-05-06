@@ -21,7 +21,7 @@ env:
       dataset:
         _target_: babilong_utils.TaskDataset
         dataset_path: ${envs.facts_train_path}
-      add_sentence_idx: true
+      add_sentence_idx: false
     
     noise_sentence_sampler:
       _target_: rl.retrieval_babilong.RetrSentenceSampler
@@ -43,7 +43,7 @@ test_env:
       dataset:
         _target_: babilong_utils.TaskDataset
         dataset_path: ${envs.facts_test_path}
-      add_sentence_idx: true
+      add_sentence_idx: false
     
     noise_sentence_sampler:
       _target_: rl.retrieval_babilong.RetrSentenceSampler

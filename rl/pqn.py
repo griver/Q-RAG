@@ -6,6 +6,7 @@ from torch import optim
 import torch.nn.functional as F
 from torch.optim import Adam, AdamW
 from collections import namedtuple
+from rl.bert_predictor import EmbedderWithPosEncoding
 from rl.text_env import pad_sequence_power_2
 from rl.sarsa import set_optim
 from .q_module import TextQNet, TextQNetPolicy, TextRandomPolicy, ActionEmbedTarget, TextMaxQNet, TextVNet
@@ -15,7 +16,7 @@ from omegaconf import DictConfig, OmegaConf
 from hydra.utils import instantiate
 
 
-@partial(torch.compile, mode="reduce-overhead")
+# @partial(torch.compile, mode="reduce-overhead")
 def train_step(
             critic,
             state_batch: TextMemory, 
@@ -33,7 +34,7 @@ def train_step(
     return qf_loss
 
 
-@partial(torch.compile)
+# @partial(torch.compile)
 def policy_apply(policy, v_net, state, a_embeds,  a_embeds_target, alpha, return_argmax: bool):
     action, q_values = policy(state, a_embeds, alpha, return_argmax)
     v1, v2 = v_net(state, a_embeds_target, alpha=alpha / 10)
@@ -144,7 +145,7 @@ class PQN(object):
             )
         
         action_batch = TextMemoryItem(
-            index=None, 
+            index=torch.tensor(action_batch.index[:-1], device=action_batch.input_ids.device, dtype=torch.float32), 
             input_ids=action_batch.input_ids[:-1],
             attention_mask=action_batch.attention_mask[:-1],
             text=None
