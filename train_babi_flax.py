@@ -3,10 +3,7 @@ import os
 
 os.environ["TOKENIZERS_PARALLELISM"] = "true"
 
-from transformers import AutoConfig, FlaxAutoModel, AutoTokenizer, FlaxBertPreTrainedModel
-from transformers.models.bert.modeling_flax_bert import FlaxBertModule
-import jax
-from jax import numpy as jnp
+from transformers import FlaxAutoModel, AutoTokenizer, FlaxBertPreTrainedModel
 from flax import linen as nn
 from flax.struct import PyTreeNode
 from flax import nnx
@@ -17,17 +14,13 @@ if repo_dir not in sys.path:
     print(f'add repository dir: {repo_dir}')
     sys.path.append(repo_dir)
 
-from babilong_fix import QA2FixWrapper
-from rl.retrieval_babilong import RetrNoiseInjectionDataset, RetrSentenceSampler
-from babilong_utils import TaskDataset
+from envs.babilong.babilong_fix import QA2FixWrapper
+from envs.babilong.retrieval_babilong import RetrievalBabiLong, RetrSentenceSampler
+from envs.babilong.babilong_utils import TaskDataset
 from torch.utils.tensorboard import SummaryWriter
 import datasets
-from datasets import Dataset, load_dataset, load_from_disk
-import sys
 from rl.flax_dqn import FlaxDQN, DQNArgs
-import time
 import numpy as np
-from collections import deque
 from rl.babilong_env import BabilongEnv
 from rl.jax_text_env import TextReplayBuffer
 from tqdm import tqdm
@@ -51,13 +44,13 @@ test_fact_dataset = QA2FixWrapper(TaskDataset(facts_test_path), add_sentence_idx
 noise_dataset = datasets.load_from_disk(noise_path_test)
 noise_sampler = RetrSentenceSampler(noise_dataset)
 
-dataset = RetrNoiseInjectionDataset(
+dataset = RetrievalBabiLong(
     task_dataset=fact_dataset,
     noise_sentence_sampler=noise_sampler,
     num_sentences=num_sentences
 )
 
-dataset_test = RetrNoiseInjectionDataset(
+dataset_test = RetrievalBabiLong(
     task_dataset=test_fact_dataset,
     noise_sentence_sampler=noise_sampler,
     num_sentences=num_sentences

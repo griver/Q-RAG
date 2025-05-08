@@ -1,7 +1,7 @@
 import numpy as np
 from sympy.stats import sample_stochastic_process
 from tqdm import tqdm
-from babilong_utils import TaskDataset, Dataset
+from .babilong_utils import TaskDataset, Dataset
 
 class QA2FixWrapper(Dataset):
 

@@ -1,13 +1,9 @@
-from rl.retrieval_env import RetrievalEnv, FaissRetrievalEnv
 from rl.replay_buffer import TextReplayBuffer
-from rl.retrieval_babilong import RetrNoiseInjectionDataset, RetrSentenceSampler
+from envs.babilong.retrieval_babilong import RetrievalBabiLong, RetrSentenceSampler
 from rl.agent import RetrievalAgent
-from rl.retrieval_env import RetrievalEnv, GroundTruthReward, RetrievalPolicy, TopKExhaustiveSearch, RewardForFacts
-from babilong_utils import TaskDataset
-import transformers
-import tqdm
+from envs.babilong.retrieval_env import RetrievalEnv, RetrievalPolicy, TopKExhaustiveSearch, RewardForFacts
+from envs.babilong.babilong_utils import TaskDataset
 import datasets
-from datasets import Dataset, load_dataset, load_from_disk
 import torch
 import sys
 import time
@@ -32,7 +28,7 @@ def create_babilong_env(fact_path, noise_path, num_sentences=10, max_steps=3, do
     noise_dataset = datasets.load_from_disk(noise_path)
     noise_sampler = RetrSentenceSampler(noise_dataset)
 
-    dataset = RetrNoiseInjectionDataset(
+    dataset = RetrievalBabiLong(
         task_dataset=fact_dataset,
         noise_sentence_sampler=noise_sampler,
         num_sentences=num_sentences

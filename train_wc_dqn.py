@@ -14,23 +14,13 @@ import torch
 torch.set_default_device('cuda:0')
 torch.set_float32_matmul_precision('high')
 
-from babilong_fix import QA2FixWrapper
-from rl.retrieval_babilong import RetrNoiseInjectionDataset, RetrSentenceSampler
-from babilong_utils import TaskDataset
 from torch.utils.tensorboard import SummaryWriter
-import datasets
-from datasets import Dataset, load_dataset, load_from_disk
-import sys
-import time
+from datasets import load_dataset
 import numpy as np
-from collections import deque
-from rl.babilong_env import BabilongEnv
-from rl.sacd import SAC, SACArgs
 # from rl.sarsa import SARSA, SARSAArgs
-from rl.text_env import TextReplayBuffer
 from transformers import AutoModel, AutoTokenizer
 from rl.bert_predictor import BertPredictor
-from rl.text_env import TextEnv, TextReplayBuffer
+from rl.text_env import TextReplayBuffer
 from tqdm import tqdm
 
 print(torch.get_default_device())

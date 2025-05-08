@@ -15,7 +15,7 @@ from rl.babilong_env import BabilongEnv
 from rl.text_env import ParallelTextEnv, MAX_TOKEN_LENGTH
 from tqdm import tqdm
 import torch
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import OmegaConf, DictConfig
 from hydra.utils import instantiate
 from hydra import initialize, compose
 import random

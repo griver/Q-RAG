@@ -3,13 +3,12 @@ import torch
 import sys
 import datasets
 from transformers import AutoTokenizer
-from babilong_utils import TaskDataset, SentenceSampler, NoiseInjectionDataset
-from tqdm import tqdm
+from envs.babilong.babilong_utils import TaskDataset, SentenceSampler, NoiseInjectionDataset
 from langchain_community.vectorstores import FAISS
 from langchain_community.vectorstores.utils import DistanceStrategy
-from .langchain_utils import ContrieverEmbeddingsAdapter
-from .retrieval_babilong import RetrSentenceSampler, RetrNoiseInjectionDataset
-from termcolor import colored
+from rl.langchain_utils import ContrieverEmbeddingsAdapter
+from envs.babilong.retrieval_babilong import RetrSentenceSampler, RetrievalBabiLong
+
 
 def shuffle(noise, facts):
     N_facts = len(facts)
@@ -50,7 +49,7 @@ class RetrievalEnv:
         self.references = None
         self.question = None
         self.sentences = None
-        self.facts_ids = None
+        self.facts_idx = None
         self.sent_embeds = None
         self.state = None
         self.available_acts = None
@@ -61,13 +60,9 @@ class RetrievalEnv:
         self.references = list(sample['references'])
         self.question = sample['question']  # append as this is a single str
         self.answer = sample['answer']
-        self.sentences = []
-        # self.sentences, _ = shuffle(background_text, sample['facts'])
-        self.sentences.extend(sample['noise'])
-        self.sentences.extend(sample['facts'])
-        self.facts_ids = np.arange(len(sample['noise']), len(self.sentences))
-        self.sentences = np.array(self.sentences)
-        # self.facts_ids = np.arange(len(self.sentences))
+        self.references_idx = sample.get('references_idx', None)
+        self.sentences = np.asarray(sample['chunks'])
+        self.facts_idx = list(sample['facts_idx'])
         self.sent_embeds = self.get_embeds(self.sentences)
 
     def reset(self, new_sample=None):
@@ -155,12 +150,14 @@ class RetrievalEnv:
             print(r)
         print("A:", red+self.answer+end)
         print('Facts:')
-        facts = self.sentences[self.facts_ids]
+        facts = self.sentences[self.facts_idx]
         for f in facts:
             if f in self.references:
                 print(red+f+end)
             else:
                 print(f)
+
+
 class FaissRetrievalEnv(RetrievalEnv):
 
     def __init__(
@@ -312,10 +309,10 @@ class RewardForFacts:
         self.reward_coef = reward_coef
 
     def reward(self, env : RetrievalEnv, **kwargs):
-        chosen_facts = set(env.chosen_sent_ids).intersection(env.facts_ids)
+        chosen_facts = set(env.chosen_sent_ids).intersection(env.facts_idx)
         n = len(chosen_facts) - self.prev_num_facts
         assert n >= 0, (f"How chat can happen?"
-                        f" Selected facts: {env.chosen_sent_ids}, fact_ids: {env.facts_ids}, n={n}, prev_n={self.prev_num_facts}")
+                        f" Selected facts: {env.chosen_sent_ids}, fact_ids: {env.facts_idx}, n={n}, prev_n={self.prev_num_facts}")
         self.prev_num_facts = len(chosen_facts)
         return float(n)*self.reward_coef
 
@@ -443,9 +440,9 @@ if __name__ == "__main__":
         noise_dataset_name = "data/pg19-test-with-sentences"
         noise_dataset = datasets.load_from_disk(noise_dataset_name)
         noise_sampler_test = RetrSentenceSampler(noise_dataset)
-        dataset_test = RetrNoiseInjectionDataset(task_dataset=task_dataset_test,
-                                                 noise_sentence_sampler=noise_sampler_test,
-                                                 num_sentences=num_sentences)
+        dataset_test = RetrievalBabiLong(task_dataset=task_dataset_test,
+                                         noise_sentence_sampler=noise_sampler_test,
+                                         num_sentences=num_sentences)
         print(f'retrieval dataset is loaded')
         sample = dataset_test[0]
         #print("first sample:")

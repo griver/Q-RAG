@@ -24,6 +24,22 @@ class GroundTruthReward:
         return float(all_retrieved)
 
 
+class PositionalGTReward(GroundTruthReward):
+    """
+    This version takes into account position of the support facts.
+    In babi tasks several events could have completely identical text descriptions,
+    but only one of them can be considered a support fact/reference fact.
+
+    I.E. Merry could visit the same location several times.
+    But only the last event allows us to tell where she is at the end of the story.
+
+    This reward takes into account temporal information that allows to distinguish
+    true support facts, from similar events.
+    """
+    def reward(self, env, action):
+        raise NotImplementedError()
+
+
 class BabilongEnv(TextEnv):
 
     def __init__(self,
@@ -42,7 +58,7 @@ class BabilongEnv(TextEnv):
         self.references = None
         self.question = None
         self.sentences = None
-        self.facts_ids = None
+        self.facts_idx = None
        
         self.num_steps = 0
 
@@ -52,25 +68,23 @@ class BabilongEnv(TextEnv):
                            self.reward_model)
 
     def _init_from_sample(self, sample):
-
         self.references = list(sample['references'])
         self.question = sample['question']  # append as this is a single str
         self.answer = sample['answer']
-        self.sentences = []
-        self.sentences.extend(sample['noise'])
+        self.sentences = np.asarray(sample['chunks'])
+        self.facts_idx = list(sample['facts_idx'])
+        self.references_idx = sample.get('references_idx', None)
+        # self.sentences.extend(sample['noise'])
+        # self.sentences.extend(sample['facts'])
         # self.sentences.extend([
         #   f"Fact number {i}: "  + str(f) for i, f in enumerate(sample['facts'])
         # ])
-        self.sentences.extend(sample['facts'])
-        self.facts_ids = np.arange(len(sample['noise']), len(self.sentences))
-        self.sentences = np.array(self.sentences)
-
-        self.ref_ids = []
-        for i, f in enumerate(sample['facts']):
-            if f in self.references:
-                self.ref_ids.append(i + len(sample['noise']))
-
-        self.ref_ids = np.array(self.ref_ids)[len(self.ref_ids) - len(self.references):]
+        # self.ref_ids = []
+        # for i, f in enumerate(sample['facts']):
+        #     if f in self.references:
+        #         self.ref_ids.append(i + len(sample['noise']))
+        #
+        # self.ref_ids = np.array(self.ref_ids)[len(self.ref_ids) - len(self.references):]
 
     def reset(self, new_sample=None) -> TextMemory:
         if new_sample is not None:

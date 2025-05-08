@@ -3,7 +3,7 @@ import os
 import math
 import torch
 from torch import nn
-from .retrieval_env import RetrievalPolicy
+from envs.babilong.retrieval_env import RetrievalPolicy
 import transformers
 contriever_path = "/home/griver/projects/ml/nlp/contriever"
 if contriever_path not in sys.path:
