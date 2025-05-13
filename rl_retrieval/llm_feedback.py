@@ -9,6 +9,7 @@ torch.manual_seed(42)
 
 from .feedback import AFeedbackModel
 
+
 class GenerationMixin:
     def __init__(self, gen_model_name: str, device_gen: str = "auto"):
         # Load generator model and tokenizer
@@ -86,7 +87,6 @@ Give me a short answer without explanation. YOUR ANSWER:
         decoded_text = self.gen_tok.decode(new_tokens[0], skip_special_tokens=True)
 
         return decoded_text
-
 
 
 class LLMJudge(AFeedbackModel, GenerationMixin):
@@ -230,7 +230,7 @@ FINAL ANSWER: your final answer (only "YES" or "NO" allowed here) """
 
 
 class ExactMatchFeedback(AFeedbackModel, GenerationMixin):
-
+    #ReSearcher, Search-R1
     def __init__(
             self,
             gen_model_name: str,
@@ -289,9 +289,8 @@ class ExactMatchFeedback(AFeedbackModel, GenerationMixin):
         return reward
 
 
-
 class MutualInformationFeedback(AFeedbackModel, GenerationMixin):
-
+    #-log p(y|q,F) - log p(y|q)
     def __init__(
             self,
             gen_model_name: str,

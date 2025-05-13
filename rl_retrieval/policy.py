@@ -41,4 +41,10 @@ class OraclePolicy(RetrievalPolicy):
 
             if len(choice) == self.retrieve_k:
                 break
+        # Makes a random choice if all Support Facts are selected
+        if len(choice) < self.retrieve_k:
+            available_acts = [idx for idx, not_masked in enumerate(obs['chunks_mask']) if not_masked and idx not in choice]
+            rnd_idx = np.random.choice(available_acts, size=self.retrieve_k-len(choice), replace=False)
+            choice.extend(rnd_idx)
+
         return choice
