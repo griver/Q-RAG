@@ -176,7 +176,8 @@ if __name__ == "__main__":
         print(list(sample.keys()))
         print('Chunks:')
         for i, chunk in enumerate(sample['chunks']):
-            print(f'#{i}: {chunk.replace('\n', ' ')}', end='')
+            chunk_without_newlines = chunk.replace('\n', ' ')
+            print(f'#{i}: {chunk_without_newlines}', end='')
             print(" [FACT]" if i in sample['facts_idx'] else " [NOISE]", end='')
             if 'references_idx' in sample:
                 print( " [SUPPORT]" if i in sample['references_idx'] else "")
