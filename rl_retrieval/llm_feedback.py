@@ -103,7 +103,7 @@ class LLMJudge(AFeedbackModel, GenerationMixin):
             device_gen: str = "auto",
             device_judge: str = "auto",
     ):
-        AFeedbackModel.__init__()
+        AFeedbackModel.__init__(self)
         # всегда загружаем генератор
         GenerationMixin.__init__(self, gen_model_name, device_gen)
         judge_model_name = judge_model_name or gen_model_name
@@ -237,7 +237,7 @@ class ExactMatchFeedback(AFeedbackModel, GenerationMixin):
             completion_reward: float = 1.0,
             device_gen: str = "auto",
     ):
-        AFeedbackModel.__init__()
+        AFeedbackModel.__init__(self)
         GenerationMixin.__init__(self, gen_model_name, device_gen) # всегда загружаем генератор
         self.completion_reward = completion_reward
 
@@ -297,7 +297,7 @@ class MutualInformationFeedback(AFeedbackModel, GenerationMixin):
             completion_coeff: float = 1.0,
             device_gen: str = "auto",
     ):
-        AFeedbackModel.__init__()
+        AFeedbackModel.__init__(self)
         GenerationMixin.__init__(self, gen_model_name, device_gen) # всегда загружаем генератор
         self.completion_coeff = completion_coeff
 

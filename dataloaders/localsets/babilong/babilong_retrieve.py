@@ -7,7 +7,6 @@ from typing import List, Any, Tuple
 from dataloaders.localsets.babilong.qa_support_fact_fix import QA2FixWrapper
 
 
-
 class RetrSentenceSampler:
     def __init__(self,
                  dataset,
