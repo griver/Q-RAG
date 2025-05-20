@@ -124,6 +124,7 @@ class PositionalRotaryEmbedding(rotary_embedding_torch.RotaryEmbedding):
 
         return apply_rotary_emb(freqs, t, scale = scale, seq_dim = seq_dim)
 
+
 class EmbedderWithPosEncoding(BertPredictor):
     def __init__(self, bert: RobertaModel, num_hidden_layers, tokenizer, model_dim, output_size, n_output) -> None:
         super().__init__(bert, num_hidden_layers, tokenizer, model_dim, output_size, n_output)

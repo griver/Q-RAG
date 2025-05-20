@@ -45,6 +45,7 @@ class PQN(object):
 
     def __init__(self, config: DictConfig):
 
+        self.config = copy.deepcopy(config)
         self.gamma = config.pqn.hyperparams.gamma
         self.alpha = config.pqn.hyperparams.alpha
         self.alpha_start = self.alpha 
@@ -177,3 +178,53 @@ class PQN(object):
         self.critic.action_embed.eval()
         # self.v_net_target.train()
         # self.action_embed_target.train()
+
+    def save(self, checkpoint_path: str) -> None:
+        """
+        Save state of all networks, optimizer and scheduler into a single file
+
+        """
+        os.makedirs(os.path.dirname(checkpoint_path), exist_ok=True)
+
+        checkpoint = {
+            # основные сети
+            "critic": self.critic.state_dict(),
+            "policy": self.policy.state_dict(),
+            "random_policy": self.random_policy.state_dict(),
+            "v_net_target": self.v_net_target.state_dict(),
+            "action_embed_target": self.action_embed_target.state_dict(),
+            "critic_optim": self.critic_optim.state_dict(),
+            "scheduler": self.scheduler.state_dict(),
+            "alpha": self.alpha, #changes in training phase
+        }
+        torch.save(checkpoint, checkpoint_path)
+        print(f"[INFO] PQN checkpoint saved → {checkpoint_path}")
+
+    def load(self, checkpoint_path: str, strict: bool = True) -> None:
+        """
+        load network state_dict from checkpoint
+        `strict` goes to `load_state_dict`.
+        """
+        if not os.path.isfile(checkpoint_path):
+            raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
+
+        checkpoint = torch.load(checkpoint_path, map_location=torch.get_default_device())
+
+        self.critic.load_state_dict(checkpoint["critic"], strict=strict)
+        self.policy.load_state_dict(checkpoint["policy"], strict=strict)
+        # у random_policy обычно нет параметров, но на всякий случай
+        if "random_policy" in checkpoint:
+            self.random_policy.load_state_dict(checkpoint["random_policy"], strict=False)
+        self.v_net_target.load_state_dict(checkpoint["v_net_target"], strict=strict)
+        self.action_embed_target.load_state_dict(checkpoint["action_embed_target"], strict=strict)
+
+        # при наличии — восстанавливаем оптимизатор и scheduler
+        if "critic_optim" in checkpoint:
+            self.critic_optim.load_state_dict(checkpoint["critic_optim"])
+        if "scheduler" in checkpoint:
+            self.scheduler.load_state_dict(checkpoint["scheduler"])
+
+        # восстанавливаем значение α, если оно было сохранено
+        self.alpha = checkpoint.get("alpha", self.alpha)
+
+        print(f"[INFO] PQN checkpoint loaded  ← {checkpoint_path}")

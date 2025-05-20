@@ -1,0 +1,5 @@
+log_dir: runs/
+tensorboard:
+  _target_: torch.utils.tensorboard.SummaryWriter
+  comment: _PQN_${envs.task}
+  log_dir: null #set to the same value as logger.log_dir if log_dir is not None

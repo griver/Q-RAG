@@ -19,6 +19,7 @@ from omegaconf import OmegaConf, DictConfig
 from hydra.utils import instantiate
 from hydra import initialize, compose
 import random
+from datetime import datetime
 
 
 @torch.no_grad()
@@ -42,7 +43,22 @@ def load_config(name, overrides=None):
             overrides=overrides if overrides else []
         )
         OmegaConf.resolve(cfg)
+        cfg = prepare_config(cfg)
         return cfg
+
+def prepare_config(cfg):
+    """
+    modifies config for parameters that should depend on each other
+    """
+    if cfg.logger.log_dir is not None:
+        current_time = datetime.now().strftime("%b%d_%H-%M-%S")
+        cfg.logger.log_dir = os.path.join(cfg.logger.log_dir, current_time)
+        cfg.logger.tensorboard.log_dir = os.path.join(cfg.logger.log_dir, 'tb_logs/')
+
+    # enumerate_facts = (cfg.positional_coding == 'enum') #TODO: add version that enumerate all chunks
+    # cfg.envs.env.dataset.task_dataset.add_sentence_idx = enumerate_facts
+    # cfg.envs.test_env.dataset.task_dataset.add_sentence_idx = enumerate_facts
+    return cfg
 
 
 def set_all_seeds(seed):
@@ -58,6 +74,16 @@ agent_config: DictConfig = cfg.algo
 env_config: DictConfig = cfg.envs
 
 writer: SummaryWriter = instantiate(cfg.logger.tensorboard)
+os.makedirs(cfg.logger.log_dir, exist_ok=True)
+config_save_path = os.path.join(cfg.logger.log_dir, "config.yaml")
+OmegaConf.save(config=cfg, f=config_save_path)
+print(f"[INFO] Training config saved to {config_save_path}")
+
+# path to checkpoints and metric to determine the best model
+ckpt_last_path = os.path.join(cfg.logger.log_dir, "model_last.pt")
+ckpt_best_path = os.path.join(cfg.logger.log_dir, "model_best.pt")
+best_eval_reward = -float("inf")
+
 
 torch.set_default_device(cfg.device)
 torch.set_float32_matmul_precision('high')
@@ -112,6 +138,15 @@ for it in progress_bar:
             'qf_loss': qf_loss,
             'step': step,
         })
+        agent.save(ckpt_last_path)
+        #torch.save(agent.state_dict(), ckpt_last_path)
+
+        mean_eval_reward = np.mean(r_eval)
+        if mean_eval_reward > best_eval_reward:
+            best_eval_reward = mean_eval_reward
+            agent.save(ckpt_best_path)
+            #torch.save(agent.state_dict(), ckpt_best_path)
+            print(f"[INFO] New best model saved with reward {best_eval_reward:.3f}")
 
         train_rewards = []
 

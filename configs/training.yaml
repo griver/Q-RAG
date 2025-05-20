@@ -1,11 +1,11 @@
 defaults:
   - envs: babilong 
   - algo: pqn
-  - logger: tb
+  - logger: logging
   - _self_
 
 seed: 42
-device: 'cuda:1'
+device: 'cuda:0'
 learning_start: 200
 steps_count: 50_000
 batch_size: 32

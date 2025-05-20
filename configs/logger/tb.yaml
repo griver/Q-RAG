@@ -1,3 +1,0 @@
-tensorboard:
-  _target_: torch.utils.tensorboard.SummaryWriter
-  comment: _PQN_${envs.task}
