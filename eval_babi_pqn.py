@@ -43,12 +43,39 @@ def prepare_config(cfg, max_steps: int, num_sentences: int):
     cfg.envs.test_env.dataset.num_sentences = num_sentences
     return cfg
 
+def calc_fact_f1_em(predicted_support_idxs, gold_support_idxs):
+    # Taken from hotpot_eval
+    cur_sp_pred = set(map(int, predicted_support_idxs))
+    gold_sp_pred = set(map(int, gold_support_idxs))
+    tp, fp, fn = 0, 0, 0
+    for e in cur_sp_pred:
+        if e in gold_sp_pred:
+            tp += 1
+        else:
+            fp += 1
+    for e in gold_sp_pred:
+        if e not in cur_sp_pred:
+            fn += 1
+    prec = 1.0 * tp / (tp + fp) if tp + fp > 0 else 0.0
+    recall = 1.0 * tp / (tp + fn) if tp + fn > 0 else 0.0
+    f1 = 2 * prec * recall / (prec + recall) if prec + recall > 0 else 0.0
+    em = 1.0 if fp + fn == 0 else 0.0
+
+    # In case everything is empty, set both f1, em to be 1.0.
+    # Without this change, em gets 1 and f1 gets 0
+    if not cur_sp_pred and not gold_sp_pred:
+        f1, em = 1.0, 1.0
+        f1, em = 1.0, 1.0
+    return f1, em
+
 
 @torch.no_grad()
 def evaluate_episode(env: BabilongEnv, agent: PQN) -> float:
     """Run a single episode and return the cumulative reward."""
     state = env.reset()
+    text_len = env.get_sample_len(agent.action_tokenizer)
     done = False
+
     # Pre‑compute static embeddings that do not change during an episode
     extra_embeds = env.get_extra_embeds(
         agent.action_tokenizer,
@@ -67,7 +94,16 @@ def evaluate_episode(env: BabilongEnv, agent: PQN) -> float:
         state, _, reward, done = env.step(action)
         episode_return += reward
 
-    return episode_return
+    pred_sf = [int(i) for i in state.item_ids]
+    gt_sf = list(env.references_idx)
+    f1, em =  calc_fact_f1_em(pred_sf, gt_sf)
+
+    return {
+        'return':episode_return,
+        'text_len':text_len,
+        'f1': f1,
+        'em': em,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -75,32 +111,16 @@ def evaluate_episode(env: BabilongEnv, agent: PQN) -> float:
 # ---------------------------------------------------------------------------
 
 def main(argv: List[str] | None = None) -> None:  # noqa: D401
-    parser = argparse.ArgumentParser(
-        description="Evaluate a trained PQN agent on the Babilong environment."
-    )
-    parser.add_argument(
-        "savedir",
-        type=str,
-        help=(
-            "Directory containing the training artefacts (config.yaml, "
-            "model_best.pt, model_last.pt)."
-        ),
-    )
+    parser = argparse.ArgumentParser(description="Evaluate a trained PQN agent on the Babilong environment.")
+    parser.add_argument("savedir", type=str,
+        help=("Directory containing the training artefacts (config.yaml, " 
+              "model_best.pt, model_last.pt)."),
+        )
     parser.add_argument("--num_samples", type=int, default=1000, help="Number of evaluation episodes.")
     parser.add_argument("--max_steps", type=int, default=6, help="Max steps per episode (override).")
-    parser.add_argument(
-        "--num_sentences",
-        type=int,
-        default=50,
-        help="Number of sentences in a sample (override).",
-    )
-    parser.add_argument(
-        "--use_last",
-        action="store_true",
-        help="Load weights from model_last.pt instead of model_best.pt.",
-    )
+    parser.add_argument("--num_sentences", type=int, default=50, help="Number of sentences in a sample (override).",)
+    parser.add_argument("--use_last",action="store_true", help="Load weights from model_last.pt instead of model_best.pt.",)
     parser.add_argument("--seed", type=int, default=42, help="Random seed.")
-
     args = parser.parse_args(argv)
 
     # -----------------------------------------------------------------------
@@ -151,15 +171,26 @@ def main(argv: List[str] | None = None) -> None:  # noqa: D401
     # 5. Evaluate
     # -----------------------------------------------------------------------
     returns = []
+    text_lens = []
+    all_em = []
+    all_f1 = []
     for _ in tqdm(range(args.num_samples), desc="Evaluating", ncols=80):
-        returns.append(evaluate_episode(env_test, agent))
+        res = evaluate_episode(env_test, agent)
+        returns.append(res['return'])
+        text_lens.append(res['text_len'])
+        all_f1.append(res['f1'])
+        all_em.append(res['em'])
 
     mean_return = float(np.mean(returns))
     std_return = float(np.std(returns))
+    fact_em = sum(all_em) / len(all_em)
+    fact_f1 = sum(all_f1) / len(all_f1)
 
     print(
-        f"Evaluated on {args.num_samples} episodes | "
-        f"Mean return: {mean_return:.3f} ± {std_return:.3f} (std)"
+        f"Evaluated on {args.num_samples} episodes, max_retrieves={args.max_steps} | "
+        f"Mean return: {mean_return:.3f} ± {std_return:.3f} (std) | "
+        f"Mean text len: {np.mean(text_lens):.2f} | "
+        f"EM: {fact_em:.3f} | F1: {fact_f1:.3f}"
     )
 
 

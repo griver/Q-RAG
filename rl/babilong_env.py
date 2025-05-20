@@ -2,6 +2,8 @@ import numpy as np
 from collections import namedtuple
 from typing import Tuple, Dict, List, Any, Union
 import torch.utils
+from nltk.probability import gt_demo
+
 # from rl.jax_text_env import TextEnv, TextMemory, TextMemoryItem
 from rl.text_env import TextEnv, TextMemory, TextMemoryItem
 from transformers import PreTrainedTokenizer, PreTrainedTokenizerFast
@@ -37,7 +39,12 @@ class PositionalGTReward(GroundTruthReward):
     true support facts, from similar events.
     """
     def reward(self, env, action):
-        raise NotImplementedError()
+        if self.only_at_max_step and (env.num_steps < env.max_steps):
+            return 0.
+
+        pred_sf = set(map(int, env.memory.item_ids))
+        gt_sf = set(env.references_idx)
+        return 1.0 if gt_sf.issubset(pred_sf) else 0.0
 
 
 class BabilongEnv(TextEnv):
@@ -86,6 +93,7 @@ class BabilongEnv(TextEnv):
         #
         # self.ref_ids = np.array(self.ref_ids)[len(self.ref_ids) - len(self.references):]
 
+
     def reset(self, new_sample=None) -> TextMemory:
         if new_sample is not None:
             self._init_from_sample(new_sample)
@@ -125,3 +133,10 @@ class BabilongEnv(TextEnv):
     def _reward(self, action):
         return self.reward_model.reward(self, action)
 
+    def get_sample_len(self, tokenizer):
+        """
+        Return total length of all texts in the current retrieval task
+        """
+        total_len = len(tokenizer(self.question)['input_ids'])
+        total_len += sum(len(chunk) for chunk in tokenizer(list(self.sentences))['input_ids'])
+        return total_len

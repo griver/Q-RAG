@@ -15,7 +15,8 @@ facts_test_path: data/tasks_1-20_v1-2/en-10k/${envs.task}_test.txt
 env:
   _target_: rl.babilong_env.BabilongEnv
   max_steps: ${envs.max_steps}
-  
+  reward_model:
+    _target_: rl.babilong_env.PositionalGTReward
   # Dataset Configuration
   dataset:
     _target_: envs.babilong.retrieval_babilong.RetrievalBabiLong
@@ -38,7 +39,8 @@ env:
 test_env:
   _target_: rl.babilong_env.BabilongEnv
   max_steps: ${envs.env.max_steps}
-  
+  reward_model:
+    _target_: rl.babilong_env.PositionalGTReward
   dataset:
     _target_: envs.babilong.retrieval_babilong.RetrievalBabiLong
     num_sentences: ${envs.env.dataset.num_sentences}
