@@ -68,7 +68,7 @@ def set_all_seeds(seed):
   torch.cuda.manual_seed(seed)
   torch.backends.cudnn.deterministic = True
 
-    
+
 cfg: DictConfig = load_config(name="training")
 agent_config: DictConfig = cfg.algo
 env_config: DictConfig = cfg.envs
@@ -101,7 +101,10 @@ parallel_env = ParallelTextEnv(
     state_tokenizer=agent.state_tokenizer,
     action_tokenizer=agent.action_tokenizer)
 
-progress_bar = tqdm(range(cfg.steps_count), desc="Training")
+total_steps = cfg.steps_count * cfg.accumulate_grads
+eval_interval = cfg.eval_interval * cfg.accumulate_grads
+#assuming we don't need to scale cfg.learning_start with grad_accumulation
+progress_bar = tqdm(range(total_steps), desc="Training")
 
 states_list, _ = parallel_env.reset()
 step = 0
@@ -122,7 +125,7 @@ for it in progress_bar:
         train_batch.reward, 
         train_batch.not_done)
     
-    if it % cfg.eval_interval == 0:
+    if it % eval_interval == 0:
 
         agent.eval()
         
@@ -146,7 +149,7 @@ for it in progress_bar:
             best_eval_reward = mean_eval_reward
             agent.save(ckpt_best_path)
             #torch.save(agent.state_dict(), ckpt_best_path)
-            print(f"[INFO] New best model saved with reward {best_eval_reward:.3f}")
+            #print(f"[INFO] New best model saved with reward {best_eval_reward:.3f}")
 
         train_rewards = []
 

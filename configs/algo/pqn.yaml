@@ -53,6 +53,8 @@ pqn:
     alpha: 0.005
     Lambda: 0.6
     tau: 0.02
+    max_grad_norm: 2.
+    accumulate_grads: ${accumulate_grads}
 
   optimizer:
     _target_: torch.optim.AdamW

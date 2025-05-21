@@ -21,7 +21,8 @@ def train_step(
             critic,
             state_batch: TextMemory, 
             action_batch: TextMemoryItem, 
-            reward_batch: Tensor):
+            reward_batch: Tensor,
+):
     
     reward_batch = reward_batch.squeeze()
     
@@ -29,8 +30,8 @@ def train_step(
     qf = qf_1 + qf_2  
     qf_loss = F.mse_loss(qf, reward_batch)   
     
-    qf_loss.backward()
-
+    #qf_loss.backward()
+    #doesn't compute grads anymore
     return qf_loss
 
 
@@ -52,6 +53,12 @@ class PQN(object):
         self.Lambda = config.pqn.hyperparams.Lambda
         self.tau = config.pqn.hyperparams.tau
         self.start_lr = config.pqn.optimizer.lr
+        # ===new===
+        self.max_grad_norm = config.pqn.hyperparams.max_grad_norm
+        self.accumulate_grads = config.pqn.hyperparams.accumulate_grads
+        if self.accumulate_grads < 1:
+            raise ValueError("cfg.accumulate_gradients must be a positive integer")
+        self._update_step = 0  # number of updates from the start of the training
 
         state_embed: nn.Module = instantiate(config.pqn.state_embed)
         action_embed: nn.Module = instantiate(config.pqn.action_embed)
@@ -152,20 +159,23 @@ class PQN(object):
             text=None
         )
         
-        self.critic_optim.zero_grad()
+        #self.critic_optim.zero_grad()
 
-        qf_loss = train_step(
-            self.critic,
-            state_batch, action_batch, targets)      
+        qf_loss = train_step(self.critic, state_batch, action_batch, targets) #computes backward inside
+        qf_loss = qf_loss / self.accumulate_grads
+        qf_loss.backward()
 
-        self.critic_optim.step()  
-        self.scheduler.step()
-        
-        self.alpha = self.alpha_start * self.scheduler.get_lr()[0] / self.start_lr 
+        self._update_step += 1
+        if self._update_step % self.accumulate_grads == 0:
+            torch.nn.utils.clip_grad_norm_(self.critic.parameters(), self.max_grad_norm)
+            self.critic_optim.step()
+            self.scheduler.step()
+            self.critic_optim.zero_grad()
 
-        self.v_net_target.update(self.critic, self.tau)
-        self.action_embed_target.update(self.critic, self.tau)
-        self.policy.update(self.critic)
+            self.alpha = self.alpha_start * self.scheduler.get_lr()[0] / self.start_lr
+            self.v_net_target.update(self.critic, self.tau)
+            self.action_embed_target.update(self.critic, self.tau)
+            self.policy.update(self.critic)
 
         return qf_loss.item()
     
@@ -179,7 +189,7 @@ class PQN(object):
         # self.v_net_target.train()
         # self.action_embed_target.train()
 
-    def save(self, checkpoint_path: str) -> None:
+    def save(self, checkpoint_path: str, verbose=False) -> None:
         """
         Save state of all networks, optimizer and scheduler into a single file
 
@@ -187,7 +197,6 @@ class PQN(object):
         os.makedirs(os.path.dirname(checkpoint_path), exist_ok=True)
 
         checkpoint = {
-            # основные сети
             "critic": self.critic.state_dict(),
             "policy": self.policy.state_dict(),
             "random_policy": self.random_policy.state_dict(),
@@ -198,9 +207,10 @@ class PQN(object):
             "alpha": self.alpha, #changes in training phase
         }
         torch.save(checkpoint, checkpoint_path)
-        print(f"[INFO] PQN checkpoint saved → {checkpoint_path}")
+        if verbose:
+            print(f"[INFO] PQN checkpoint saved → {checkpoint_path}")
 
-    def load(self, checkpoint_path: str, strict: bool = True) -> None:
+    def load(self, checkpoint_path: str, strict: bool = True, verbose=False) -> None:
         """
         load network state_dict from checkpoint
         `strict` goes to `load_state_dict`.

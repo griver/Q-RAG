@@ -8,7 +8,8 @@ seed: 42
 device: 'cuda:0'
 learning_start: 200
 steps_count: 50_000
-batch_size: 32
+batch_size: 16
+accumulate_grads: 3
 eval_interval: 20
 eval_episodes: 100
 envs_parallel: 3
