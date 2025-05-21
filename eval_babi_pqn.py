@@ -43,28 +43,27 @@ def prepare_config(cfg, max_steps: int, num_sentences: int):
     cfg.envs.test_env.dataset.num_sentences = num_sentences
     return cfg
 
-def calc_fact_f1_em(predicted_support_idxs, gold_support_idxs):
+def calc_fact_f1_em(predicted_support_idxs, gt_support_idxs):
     # Taken from hotpot_eval
-    cur_sp_pred = set(map(int, predicted_support_idxs))
-    gold_sp_pred = set(map(int, gold_support_idxs))
+    pred_sf = set(map(int, predicted_support_idxs))
+    gt_sf = set(map(int, gt_support_idxs))
     tp, fp, fn = 0, 0, 0
-    for e in cur_sp_pred:
-        if e in gold_sp_pred:
+    for e in pred_sf:
+        if e in gt_sf:
             tp += 1
         else:
             fp += 1
-    for e in gold_sp_pred:
-        if e not in cur_sp_pred:
+    for e in gt_sf:
+        if e not in pred_sf:
             fn += 1
     prec = 1.0 * tp / (tp + fp) if tp + fp > 0 else 0.0
     recall = 1.0 * tp / (tp + fn) if tp + fn > 0 else 0.0
     f1 = 2 * prec * recall / (prec + recall) if prec + recall > 0 else 0.0
-    em = 1.0 if fp + fn == 0 else 0.0
+    em = 1.0 if gt_sf.issubset(pred_sf) else 0.0
 
     # In case everything is empty, set both f1, em to be 1.0.
     # Without this change, em gets 1 and f1 gets 0
-    if not cur_sp_pred and not gold_sp_pred:
-        f1, em = 1.0, 1.0
+    if not pred_sf and not gt_sf:
         f1, em = 1.0, 1.0
     return f1, em
 
