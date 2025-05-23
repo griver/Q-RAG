@@ -51,8 +51,8 @@ def prepare_config(cfg):
     modifies config for parameters that should depend on each other
     """
     if cfg.logger.log_dir is not None:
-        current_time = datetime.now().strftime("%b%d_%H-%M-%S")
-        cfg.logger.log_dir = os.path.join(cfg.logger.log_dir, current_time)
+        dir_name = datetime.now().strftime("%b%d_%H-%M-%S") + cfg.logger.tensorboard.comment
+        cfg.logger.log_dir = os.path.join(cfg.logger.log_dir, dir_name)
         cfg.logger.tensorboard.log_dir = os.path.join(cfg.logger.log_dir, 'tb_logs/')
 
     # enumerate_facts = (cfg.positional_coding == 'enum') #TODO: add version that enumerate all chunks

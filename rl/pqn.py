@@ -160,7 +160,6 @@ class PQN(object):
         )
         
         #self.critic_optim.zero_grad()
-
         qf_loss = train_step(self.critic, state_batch, action_batch, targets) #computes backward inside
         qf_loss = qf_loss / self.accumulate_grads
         qf_loss.backward()

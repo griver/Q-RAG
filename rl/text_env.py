@@ -131,6 +131,7 @@ class TextEnv:
 
     @torch.no_grad()
     def get_extra_embeds(self, tokenizer, embedder: nn.Module, embedder_target: nn.Module) -> np.ndarray:
+        #TODO: add random pos indexing for chunks
         batch = stack_text_list(list(self.all_texts), tokenizer, max_length=self.action_embed_length)
         embeds, embeds_target = embedder(**batch), embedder_target(**batch)
 

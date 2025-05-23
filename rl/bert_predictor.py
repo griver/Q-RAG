@@ -126,13 +126,19 @@ class PositionalRotaryEmbedding(rotary_embedding_torch.RotaryEmbedding):
 
 
 class EmbedderWithPosEncoding(BertPredictor):
-    def __init__(self, bert: RobertaModel, num_hidden_layers, tokenizer, model_dim, output_size, n_output) -> None:
+    def __init__(self, bert: RobertaModel, num_hidden_layers, tokenizer, model_dim, output_size, n_output, encoding_type='rope') -> None:
         super().__init__(bert, num_hidden_layers, tokenizer, model_dim, output_size, n_output)
-        self.rotary_emb = PositionalRotaryEmbedding(dim=model_dim // 2)
+        assert encoding_type in ['rope', 'none'], "encoding_type must be 'rope' or 'none'"
+        self.encoding_type = encoding_type
+        if encoding_type != 'none':
+            self.rotary_emb = PositionalRotaryEmbedding(dim=model_dim // 2)
+
 
     def forward(self, input_ids, attention_mask, *args, **kw):
         embeds = super().forward(input_ids, attention_mask, *args, **kw)
-       
+        if self.encoding_type == 'none':
+            return embeds
+
         positions = kw.get('positions', None)
         seq_dim = 0 if len(embeds.shape) == 2 else 1
         should_cache = (positions is None)
