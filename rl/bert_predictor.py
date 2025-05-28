@@ -87,37 +87,47 @@ class BertPredictor(nn.Module):
 
 class PositionalRotaryEmbedding(rotary_embedding_torch.RotaryEmbedding):
 
-    def forward(
-        self,
-        t: Tensor,
-        seq_len: int,
-        should_cache: False
-    ):
-
-        if not should_cache or seq_len <= self.cached_freqs_seq_len:
-            return self.cached_freqs[t.type(torch.int32)].detach()
-
+    def __init__(self, 
+                 dim, 
+                 custom_freqs = None, 
+                 freqs_for = 'lang', 
+                 theta=10000, 
+                 max_freq=10, 
+                 num_freqs=1, 
+                 learned_freq=False, 
+                 use_xpos=False, 
+                 xpos_scale_base=512, 
+                 interpolate_factor=1, 
+                 theta_rescale_factor=1, 
+                 seq_before_head_dim=False, 
+                 cache_if_possible=True, 
+                 cache_max_seq_len=8192):
+        super().__init__(dim, custom_freqs, freqs_for, theta, max_freq, num_freqs, 
+                         learned_freq, use_xpos, xpos_scale_base, interpolate_factor, 
+                         theta_rescale_factor, seq_before_head_dim, cache_if_possible, cache_max_seq_len)
+        
         freqs = self.freqs
+        positions = torch.arange(cache_max_seq_len, device = torch.get_default_device())
 
-        freqs = einsum('..., f -> ... f', t.type(freqs.dtype), freqs)
+        freqs = einsum('..., f -> ... f', positions.type(freqs.dtype), freqs)
         freqs = repeat(freqs, '... n -> ... (n r)', r = 2)
 
-        self.cached_freqs[:seq_len] = freqs.detach()
-        self.cached_freqs_seq_len = seq_len
-
-        return freqs
-
+        self.cached_freqs = freqs.detach()
+        
+    def forward(
+        self,
+        t: Tensor
+    ):
+        return self.cached_freqs[t.type(torch.int32)].detach()
 
     def get_seq_pos(self, positions, offset = 0):
         return (positions + offset) / self.interpolate_factor
 
-    def rotate_queries_or_keys(self, t, positions, should_cache, seq_dim = None, offset = 0, scale = 1.0):
+    def rotate_queries_or_keys(self, t, positions, seq_dim = None, offset = 0, scale = 1.0):
         seq_dim = self.default_seq_dim if seq_dim is None else seq_dim
 
-        device, dtype, seq_len = t.device, t.dtype, t.shape[seq_dim]
-
         seq = self.get_seq_pos(positions, offset=offset)
-        freqs = self.forward(seq, seq_len=seq_len, should_cache=should_cache)
+        freqs = self.forward(seq)
 
         if seq_dim == -3:
             freqs = rearrange(freqs, 'n d -> n 1 d')
@@ -126,26 +136,24 @@ class PositionalRotaryEmbedding(rotary_embedding_torch.RotaryEmbedding):
 
 
 class EmbedderWithPosEncoding(BertPredictor):
-    def __init__(self, bert: RobertaModel, num_hidden_layers, tokenizer, model_dim, output_size, n_output, encoding_type='rope') -> None:
+    def __init__(self, bert: RobertaModel, num_hidden_layers, tokenizer, model_dim, output_size, n_output, encoding_type='rope', max_seq_len=1000) -> None:
         super().__init__(bert, num_hidden_layers, tokenizer, model_dim, output_size, n_output)
         assert encoding_type in ['rope', 'none'], "encoding_type must be 'rope' or 'none'"
         self.encoding_type = encoding_type
         if encoding_type != 'none':
-            self.rotary_emb = PositionalRotaryEmbedding(dim=model_dim // 2)
+            self.rotary_emb = PositionalRotaryEmbedding(dim=model_dim // 2, cache_max_seq_len=max_seq_len)
 
-
-    def forward(self, input_ids, attention_mask, *args, **kw):
+    def forward(self, input_ids, attention_mask, positions, *args, **kw):
         embeds = super().forward(input_ids, attention_mask, *args, **kw)
         if self.encoding_type == 'none':
             return embeds
 
-        positions = kw.get('positions', None)
+        # positions = kw.get('positions', None)
         seq_dim = 0 if len(embeds.shape) == 2 else 1
-        should_cache = (positions is None)
 
-        if positions is None:
-            positions = torch.arange(embeds.shape[seq_dim], device = embeds.device, dtype = embeds.dtype)
+        # if positions is None:
+        #     positions = torch.arange(embeds.shape[seq_dim], device = embeds.device, dtype = embeds.dtype)
         
-        embeds = self.rotary_emb.rotate_queries_or_keys(embeds, positions, should_cache, seq_dim=seq_dim, offset=0)
+        embeds = self.rotary_emb.rotate_queries_or_keys(embeds, positions, seq_dim=seq_dim, offset=0)
        
         return embeds

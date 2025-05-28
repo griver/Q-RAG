@@ -42,6 +42,8 @@ def load_config(name, overrides=None):
             config_name=name,
             overrides=overrides if overrides else []
         )
+        cli_cfg = OmegaConf.from_cli()
+        cfg = OmegaConf.merge(cfg, cli_cfg)
         OmegaConf.resolve(cfg)
         cfg = prepare_config(cfg)
         return cfg
