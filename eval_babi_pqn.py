@@ -120,6 +120,7 @@ def main(argv: List[str] | None = None) -> None:  # noqa: D401
     parser.add_argument("--num_sentences", type=int, default=50, help="Number of sentences in a sample (override).",)
     parser.add_argument("--use_last",action="store_true", help="Load weights from model_last.pt instead of model_best.pt.",)
     parser.add_argument("--seed", type=int, default=42, help="Random seed.")
+    #parser.add_argument('--ignore_positions', action='store_true', help="Ignore positional encodings in chunks")
     args = parser.parse_args(argv)
 
     # -----------------------------------------------------------------------
