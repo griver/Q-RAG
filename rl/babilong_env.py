@@ -52,12 +52,16 @@ class BabilongEnv(TextEnv):
     def __init__(self,
                  dataset,
                  max_steps = 3,
+                 max_chunks_count = 1000,
+                 index_type = "random", # "absolute", "relative"
                  reward_model = GroundTruthReward()):
         
         super().__init__()
 
         self.dataset = dataset
         self.max_steps = max_steps
+        self.max_chunks_count = max_chunks_count
+        self.index_type = index_type
         # self.max_embed_length = max_embed_length
         # self.action_embed_length = action_embed_length
         self.reward_model = reward_model
@@ -72,6 +76,8 @@ class BabilongEnv(TextEnv):
     def copy(self):
         return BabilongEnv(self.dataset, 
                            self.max_steps,
+                           self.max_chunks_count,
+                           self.index_type,
                            self.reward_model)
 
     def _init_from_sample(self, sample):

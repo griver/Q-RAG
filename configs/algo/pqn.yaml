@@ -8,6 +8,7 @@ model:
     input_dim: 768
     hidden_dim: 256
     output_dim: 1
+    max_seq_len: 5000
 
 # PQN Configuration
 pqn:
@@ -44,6 +45,7 @@ pqn:
     model_dim: ${algo.model.predictor.input_dim}
     output_size: ${algo.model.predictor.hidden_dim}
     n_output: ${algo.model.predictor.output_dim}
+    max_seq_len: ${algo.model.predictor.max_seq_len}
   
   state_embed_target: *bert_predictor
   action_embed_target: *pos_embed

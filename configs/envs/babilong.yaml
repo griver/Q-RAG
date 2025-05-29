@@ -1,20 +1,19 @@
 max_steps: 6
 num_sentences: 50
+max_chunks_count: 100
+index_type: "random" # "absolute", "relative"
 task: "qa2_two-supporting-facts"
 noise_train_path: "data/pg19-with-sentences/train"
 noise_test_path: "data/pg19-with-sentences/test"
 facts_train_path: data/tasks_1-20_v1-2/en-10k/${envs.task}_train.txt
 facts_test_path: data/tasks_1-20_v1-2/en-10k/${envs.task}_test.txt
-# noise_train_path: "/home/nazar/projects/data_sources/babilong/pg19-with-sentences/train"
-# noise_test_path: "/home/nazar/pg19-test-with-sentences"
-# facts_train_path: /home/nazar/tasks_1-20_v1-2/en-10k/${envs.task}_train.txt
-# facts_test_path: /home/nazar/tasks_1-20_v1-2/en-10k/${envs.task}_test.txt
-
 
 # Core Environment Configuration
 env:
   _target_: rl.babilong_env.BabilongEnv
   max_steps: ${envs.max_steps}
+  max_chunks_count: ${envs.max_chunks_count}
+  index_type: ${envs.index_type}
   reward_model:
     _target_: rl.babilong_env.PositionalGTReward
   # Dataset Configuration
@@ -39,6 +38,8 @@ env:
 test_env:
   _target_: rl.babilong_env.BabilongEnv
   max_steps: ${envs.env.max_steps}
+  max_chunks_count: ${envs.max_chunks_count}
+  index_type: ${envs.index_type}
   reward_model:
     _target_: rl.babilong_env.PositionalGTReward
   dataset:

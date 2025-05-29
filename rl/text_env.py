@@ -120,7 +120,47 @@ def stack_text_list(text_array: List[str], tokenizer, max_length=MAX_TOKEN_LENGT
         padding_value=0)
     
     return {"input_ids": input_ids.to(device), "attention_mask": attention_mask.to(device)}
+
+
+def get_randomized_idx(n, max_indent=1000, num_splits=5):
+    "returns indices in range from 0 to max_indent+n"
+    indents = sorted(np.random.choice(max_indent, size=num_splits))
+    idx = np.arange(n)
+    split_id = sorted(np.random.choice(idx[1:n-1], size=num_splits-1, replace=False))
+    splits  = np.split(idx, split_id)
+    result = [e+indent for split, indent in zip(splits, indents) for e in split]
+    return sorted(result) 
+
+
+def relative_positions(indices, n):
+    """
+    Compute relative positions in range 0 to len(indices) based on given indices.
     
+    Parameters:
+    indices (list): List of indices where the relative position changes
+    n (int): Length of the output array
+    
+    Returns:
+    numpy.ndarray: Array of relative indices
+    
+    Example:
+    >>> relative_index([2, 5, 7], 10)
+    array([0, 0, 1, 1, 1, 2, 2, 3, 3, 3])
+    """
+    
+    result = np.zeros(n, dtype=int)
+    sorted_indices = sorted(indices) + [n]
+    current_value = 0
+    start = 0
+    
+    for end in sorted_indices:
+        if end > start:
+            result[start:end] = current_value
+            current_value += 1
+            start = end
+    
+    return result
+
 
 class TextEnv:
 
@@ -128,12 +168,15 @@ class TextEnv:
     max_embed_length = MAX_TOKEN_LENGTH["state"]
     action_embed_length = MAX_TOKEN_LENGTH["action"]
     max_batch_size = 256
+    max_chunks_count = 1000
+    index_type = "random" # "absolute", "relative"
 
     @torch.no_grad()
     def get_extra_embeds(self, tokenizer, embedder: nn.Module, embedder_target: nn.Module) -> np.ndarray:
         #TODO: add random pos indexing for chunks
         batch = stack_text_list(list(self.all_texts), tokenizer, max_length=self.action_embed_length)
-        embeds, embeds_target = embedder(**batch), embedder_target(**batch)
+        positions = torch.tensor(self.positions, device=torch.get_default_device())
+        embeds, embeds_target = embedder(**batch, positions=positions), embedder_target(**batch, positions=positions)
 
         return embeds, embeds_target
     
@@ -166,6 +209,13 @@ class TextEnv:
         self.question = question
         self.items_dict = SortedList(key=lambda memory_item: memory_item.index)
 
+        if self.index_type == "random":
+            self.positions = get_randomized_idx(len(text_array), max_indent=self.max_chunks_count - len(text_array))
+        elif self.index_type == "absolute":
+            self.positions = list(range(len(text_array)))
+        elif self.index_type == "relative":
+            self.positions = np.zeros(len(text_array)).tolist()
+
         # tokens = self.tokenize(question, self.action_embed_length)
         # self.action_tokens = self.tokenize_list(text_array)
 
@@ -190,7 +240,7 @@ class TextEnv:
         # action_tokens = self.action_tokens[action]
 
         memory_item = TextMemoryItem(
-            index=action, 
+            index=self.positions[action], 
             input_ids=None,
             attention_mask=None,
             text=action_text
@@ -212,6 +262,9 @@ class TextEnv:
         )
 
         done = len(self.memory.item_ids) >= len(self.all_texts)
+
+        if self.index_type == "relative":
+            self.positions = relative_positions([it.index for it in self.items_dict], len(self.positions))
 
         return self.memory, memory_item, done
     
