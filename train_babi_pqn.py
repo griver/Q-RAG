@@ -44,7 +44,7 @@ def load_config(name, overrides=None):
         )
         cli_cfg = OmegaConf.from_cli()
         cfg = OmegaConf.merge(cfg, cli_cfg)
-        OmegaConf.resolve(cfg)
+        #OmegaConf.resolve(cfg)
         cfg = prepare_config(cfg)
         return cfg
 
@@ -78,7 +78,7 @@ env_config: DictConfig = cfg.envs
 writer: SummaryWriter = instantiate(cfg.logger.tensorboard)
 os.makedirs(cfg.logger.log_dir, exist_ok=True)
 config_save_path = os.path.join(cfg.logger.log_dir, "config.yaml")
-OmegaConf.save(config=cfg, f=config_save_path)
+OmegaConf.save(config=cfg, f=config_save_path, resolve=False)
 print(f"[INFO] Training config saved to {config_save_path}")
 
 # path to checkpoints and metric to determine the best model
