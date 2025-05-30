@@ -1,5 +1,3 @@
-from itertools import accumulate
-
 # Multi-Step Retrieval via Reinforcement Learning 
 
 ## Training
