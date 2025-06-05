@@ -83,7 +83,8 @@ class BertPredictor(nn.Module):
             prediction  = (out * mask).sum(1) / mask.sum(1)
 
         return prediction / 10
-    
+
+
 
 class PositionalRotaryEmbedding(rotary_embedding_torch.RotaryEmbedding):
 
@@ -105,7 +106,7 @@ class PositionalRotaryEmbedding(rotary_embedding_torch.RotaryEmbedding):
         super().__init__(dim, custom_freqs, freqs_for, theta, max_freq, num_freqs, 
                          learned_freq, use_xpos, xpos_scale_base, interpolate_factor, 
                          theta_rescale_factor, seq_before_head_dim, cache_if_possible, cache_max_seq_len)
-        
+        print('interpolate factor:', interpolate_factor)
         freqs = self.freqs
         positions = torch.arange(cache_max_seq_len, device = torch.get_default_device())
 
@@ -136,12 +137,26 @@ class PositionalRotaryEmbedding(rotary_embedding_torch.RotaryEmbedding):
 
 
 class EmbedderWithPosEncoding(BertPredictor):
-    def __init__(self, bert: RobertaModel, num_hidden_layers, tokenizer, model_dim, output_size, n_output, encoding_type='rope', max_seq_len=1000) -> None:
+    def __init__(self,
+                 bert: RobertaModel,
+                 num_hidden_layers,
+                 tokenizer,
+                 model_dim,
+                 output_size,
+                 n_output,
+                 encoding_type='rope',
+                 max_seq_len=1000,
+                 interpolate_factor=1
+                 ) -> None:
         super().__init__(bert, num_hidden_layers, tokenizer, model_dim, output_size, n_output)
         assert encoding_type in ['rope', 'none'], "encoding_type must be 'rope' or 'none'"
         self.encoding_type = encoding_type
-        if encoding_type != 'none':
-            self.rotary_emb = PositionalRotaryEmbedding(dim=model_dim // 2, cache_max_seq_len=max_seq_len)
+        if encoding_type != 'none': #
+            self.rotary_emb = PositionalRotaryEmbedding(
+                dim=model_dim // 2,
+                cache_max_seq_len=max_seq_len,
+                interpolate_factor=interpolate_factor
+            )
 
     def forward(self, input_ids, attention_mask, positions, *args, **kw):
         embeds = super().forward(input_ids, attention_mask, *args, **kw)

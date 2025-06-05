@@ -24,6 +24,8 @@ class QA2FixWrapper(Dataset):
         if self.add_sentence_idx:
             self.add_id_to_facts(sample)
             sample['references'] = [sample['facts'][idx] for idx in fix['references_idx']]
+
+        assert set(fix['references_idx']) == set(sample['references_idx']), 'they should be the same with exception of order'
         sample['references_idx'] = fix['references_idx']
         return sample
 

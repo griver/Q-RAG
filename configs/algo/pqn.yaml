@@ -9,6 +9,8 @@ model:
     hidden_dim: 256
     output_dim: 1
     max_seq_len: 5000
+    interpolate_factor: 1 # used only in action embedder for chunks positional index interpolation
+                          # step between idx[i] and idx[i+1] is equal to 1./interpolate_factor
 
 # PQN Configuration
 pqn:
@@ -46,6 +48,7 @@ pqn:
     output_size: ${algo.model.predictor.hidden_dim}
     n_output: ${algo.model.predictor.output_dim}
     max_seq_len: ${algo.model.predictor.max_seq_len}
+    interpolate_factor: ${algo.model.predictor.interpolate_factor}
   
   state_embed_target: *bert_predictor
   action_embed_target: *pos_embed

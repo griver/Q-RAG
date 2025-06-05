@@ -1,8 +1,8 @@
 max_steps: 6
 num_sentences: 100
 max_chunks_count: 2000
-index_type: "random" # "absolute", "relative"
-task: "qa2_two-supporting-facts"
+index_type: 'random' #"random" # "absolute", "relative"
+task: "qa2_two-supporting-facts" #"qa3_three-supporting-facts" #"qa2_two-supporting-facts"
 noise_train_path: "data/pg19-with-sentences/train"
 noise_test_path: "data/pg19-with-sentences/test"
 facts_train_path: data/tasks_1-20_v1-2/en-10k/${envs.task}_train.txt
@@ -22,12 +22,9 @@ env:
     num_sentences: ${envs.num_sentences}
     
     task_dataset:
-      _target_: envs.babilong.babilong_fix.QA2FixWrapper
-      dataset:
-        _target_: envs.babilong.babilong_utils.TaskDataset
-        dataset_path: ${envs.facts_train_path}
-      add_sentence_idx: false
-    
+      _target_: envs.babilong.babilong_utils.TaskDataset
+      dataset_path: ${envs.facts_train_path}
+
     noise_sentence_sampler:
       _target_: envs.babilong.retrieval_babilong.RetrSentenceSampler
       dataset:
@@ -47,12 +44,9 @@ test_env:
     num_sentences: ${envs.env.dataset.num_sentences}
     
     task_dataset:
-      _target_: envs.babilong.babilong_fix.QA2FixWrapper
-      dataset:
-        _target_: envs.babilong.babilong_utils.TaskDataset
-        dataset_path: ${envs.facts_test_path}
-      add_sentence_idx: false
-    
+      _target_: envs.babilong.babilong_utils.TaskDataset
+      dataset_path: ${envs.facts_test_path}
+
     noise_sentence_sampler:
       _target_: envs.babilong.retrieval_babilong.RetrSentenceSampler
       dataset:
