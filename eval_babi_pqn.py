@@ -9,6 +9,7 @@ import numpy as np
 import torch
 from omegaconf import OmegaConf
 from hydra.utils import instantiate
+from torchvision.ops.misc import interpolate
 from tqdm import tqdm
 
 # ---- add repository root to PYTHONPATH (so that rl.* modules resolve) ---- #
@@ -35,13 +36,36 @@ def set_all_seeds(seed: int) -> None:
     torch.backends.cudnn.benchmark = False
 
 
-def prepare_config(cfg, max_steps: int, num_sentences: int):
-    """Apply CLI overrides to the loaded config in‑place and return it."""
-    # Override only test‑environment‑specific fields so that the training
-    # configuration remains untouched.
-    cfg.envs.test_env.max_steps = max_steps
-    cfg.envs.test_env.dataset.num_sentences = num_sentences
-    return cfg
+# def prepare_eval_config(eval_cfg, train_cfg):
+#     """Compute additional complex value changes"""
+#     # Override only test‑environment‑specific fields so that
+#     # the training configuration remains untouched.
+#     max_chunks_count = eval_cfg.envs.get("max_chunks_count", None)
+#     max_seq_len = eval_cfg.algo.model.predictor.get("max_seq_len", None)
+#     interpolate_factor = eval_cfg.algo.model.predictor.get("interpolate_factor", None)
+#
+#     assert max_chunks_count == max_seq_len == interpolate_factor == None, \
+#         'If you specified at least one of the [envs.max_chunks_count, algo.model.predictor.max_seq_len, algo.model.predictor.interpolate_factor] then you should also specify others'
+#
+#     eval_max_chunks = eval_cfg.envs.num_sentences
+#     if train_cfg.index_type == 'random':
+#             train_max_chunks = train_cfg.envs.max_chunks_count
+#     elif train_cfg.index_type == 'absolute':
+#             train_max_chunks = train_cfg.envs.num_sentences
+#
+#     if eval_max_chunks > train_max_chunks:
+#         eval_cfg.envs.max_chunks_count = eval_max_chunks + 1
+#         eval_cfg.algo.model.predictor.max_seq_len = max(eval_max_chunks + 1, train_cfg.algo.model.predictor.max_seq_len)
+#         eval_cfg.algo.model.predictor.interpolate_factor = eval_max_chunks / train_max_chunks
+#         print(f'Current indexing type is {train_cfg.index_type}')
+#         print(
+#             "The following parameters are updated:",
+#             f"...eval_cfg.envs.max_chunks_count={eval_cfg.envs.max_chunks_count}",
+#             f"...eval_cfg.algo.model.predictor.max_seq_len={eval_cfg.algo.model.predictor.max_seq_len}",
+#             f"...eval_cfg.algo.model.predictor.interpolate_factor={eval_cfg.algo.model.predictor.interpolate_factor}",
+#             sep='\n')
+#
+#     return eval_cfg
 
 def calc_fact_f1_em(predicted_support_idxs, gt_support_idxs):
     # Taken from hotpot_eval
@@ -109,10 +133,12 @@ def load_eval_config(name):
     cli_cfg = OmegaConf.from_cli()
     eval_cfg = OmegaConf.load(name)
     eval_cfg = OmegaConf.merge(eval_cfg, cli_cfg)
+
     train_cfg_path = os.path.join(eval_cfg.pretrained_path, 'config.yaml')
     if not os.path.exists(train_cfg_path):
         raise FileNotFoundError(f"Could not find config.yaml at {train_cfg_path}")
     train_cfg = OmegaConf.load(train_cfg_path)
+    #prepare_eval_config(eval_cfg, train_cfg)
     cfg = OmegaConf.merge(train_cfg, eval_cfg)
     OmegaConf.resolve(cfg)
     return cfg

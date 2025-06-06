@@ -86,7 +86,7 @@ class BabilongEnv(TextEnv):
         self.answer = sample['answer']
         self.sentences = np.asarray(sample['chunks'])
         self.facts_idx = list(sample['facts_idx'])
-        self.references_idx = sample.get('references_idx', None)
+        self.references_idx = sample.get('references_idx')
         # self.sentences.extend(sample['noise'])
         # self.sentences.extend(sample['facts'])
         # self.sentences.extend([
