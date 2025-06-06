@@ -2,7 +2,7 @@ max_steps: 6
 num_sentences: 100
 max_chunks_count: 2000
 index_type: 'random' #"random" # "absolute", "relative"
-task: "qa2_two-supporting-facts" #"qa3_three-supporting-facts" #"qa2_two-supporting-facts"
+task: "qa3_three-supporting-facts" #"qa3_three-supporting-facts" #"qa2_two-supporting-facts"
 noise_train_path: "data/pg19-with-sentences/train"
 noise_test_path: "data/pg19-with-sentences/test"
 facts_train_path: data/tasks_1-20_v1-2/en-10k/${envs.task}_train.txt
