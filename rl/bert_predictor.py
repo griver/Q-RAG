@@ -143,6 +143,9 @@ class EmbedderWithPosEncoding(BertPredictor):
         if encoding_type != 'none':
             self.rotary_emb = PositionalRotaryEmbedding(dim=model_dim // 2, cache_max_seq_len=max_seq_len)
 
+    def update_pos(self, embeds, positions, *args, **kw):
+        return embeds
+
     def forward(self, input_ids, attention_mask, positions, *args, **kw):
         embeds = super().forward(input_ids, attention_mask, *args, **kw)
         if self.encoding_type == 'none':
@@ -156,4 +159,26 @@ class EmbedderWithPosEncoding(BertPredictor):
         
         embeds = self.rotary_emb.rotate_queries_or_keys(embeds, positions, seq_dim=seq_dim, offset=0)
        
-        return embeds
+        return {"rope": embeds}
+    
+
+class EmbedderWithRelativeEncoding(BertPredictor):
+    def __init__(self, bert: RobertaModel, num_hidden_layers, tokenizer, model_dim, output_size, n_output, encoding_type='rope', max_seq_len=1000) -> None:
+        super().__init__(bert, num_hidden_layers, tokenizer, model_dim, output_size, n_output)
+        assert encoding_type in ['rope', 'none'], "encoding_type must be 'rope' or 'none'"
+        self.encoding_type = encoding_type
+        # if encoding_type != 'none':
+        self.rotary_emb = PositionalRotaryEmbedding(dim=model_dim // 2, cache_max_seq_len=max_seq_len)
+        # self.add_emb = nn.Embedding(2000, model_dim)
+
+    def update_pos(self, embeds, positions, *args, **kw):
+        seq_dim = 0 if len(embeds["none"].shape) == 2 else 1        
+        rope_embeds = self.rotary_emb.rotate_queries_or_keys(embeds["none"], positions, seq_dim=seq_dim, offset=0) 
+
+        return {"rope": rope_embeds, "none": embeds["none"]}
+
+    def forward(self, input_ids, attention_mask, positions, *args, **kw):
+        embeds = super().forward(input_ids, attention_mask, *args, **kw)
+        seq_dim = 0 if len(embeds.shape) == 2 else 1        
+        rope_embeds = self.rotary_emb.rotate_queries_or_keys(embeds, positions, seq_dim=seq_dim, offset=0)
+        return {"rope": rope_embeds, "none": embeds}

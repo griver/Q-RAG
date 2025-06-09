@@ -31,7 +31,7 @@ pqn:
     n_output: ${algo.model.predictor.output_dim}
 
   action_embed: &pos_embed
-    _target_: rl.bert_predictor.EmbedderWithPosEncoding
+    _target_: rl.bert_predictor.EmbedderWithRelativeEncoding
     bert:
       _target_: transformers.AutoModel.from_pretrained
       pretrained_model_name_or_path: ${algo.model.bert_name}

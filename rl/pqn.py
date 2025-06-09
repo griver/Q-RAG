@@ -17,22 +17,23 @@ from hydra.utils import instantiate
 
 
 # @partial(torch.compile, mode="reduce-overhead")
-def train_step(
-            critic,
-            state_batch: TextMemory, 
-            action_batch: TextMemoryItem, 
-            reward_batch: Tensor,
-):
+# def train_step(
+#             critic,
+#             state_batch: TextMemory, 
+#             action_batch: TextMemoryItem, 
+#             reward_batch: Tensor,
+#             accumulate_grads
+# ):
+
+#     reward_batch = reward_batch.squeeze()
     
-    reward_batch = reward_batch.squeeze()
+#     qf_1, qf_2 = critic(state_batch, action_batch)
+#     qf = qf_1 + qf_2  
+#     qf_loss = F.mse_loss(qf, reward_batch)   
     
-    qf_1, qf_2 = critic(state_batch, action_batch)
-    qf = qf_1 + qf_2  
-    qf_loss = F.mse_loss(qf, reward_batch)   
-    
-    #qf_loss.backward()
-    #doesn't compute grads anymore
-    return qf_loss
+#     (qf_loss / accumulate_grads).backward()
+#     #doesn't compute grads anymore
+#     return qf_loss, critic
 
 
 # @partial(torch.compile)
@@ -64,12 +65,13 @@ class PQN(object):
         action_embed: nn.Module = instantiate(config.pqn.action_embed)
         state_embed_target: nn.Module = instantiate(config.pqn.state_embed_target)
         action_embed_target: nn.Module = instantiate(config.pqn.action_embed_target)
-
+        state_embed_copy = copy.deepcopy(state_embed)
+        
         self.critic = TextQNet(state_embed, action_embed).to(torch.get_default_device())
         self.critic_optim = instantiate(config.pqn.optimizer, params=self.critic.parameters())
         self.scheduler = instantiate(config.pqn.scheduler, optimizer=self.critic_optim)
        
-        self.policy = TextQNetPolicy(copy.deepcopy(state_embed), self.critic).to(torch.get_default_device())
+        self.policy = TextQNetPolicy(state_embed_copy, self.critic).to(torch.get_default_device())
         self.random_policy = TextRandomPolicy().to(torch.get_default_device())
 
         self.v_net_target = TextVNet(state_embed_target, self.critic).to(torch.get_default_device())
@@ -77,6 +79,31 @@ class PQN(object):
 
         self.state_tokenizer = state_embed.tokenizer
         self.action_tokenizer = action_embed.tokenizer
+
+        self.train_step = self.make_train_step()
+
+
+    def make_train_step(self):
+
+        # @partial(torch.compile)
+        def train_step(
+                    critic,
+                    state_batch: TextMemory, 
+                    action_batch: TextMemoryItem, 
+                    reward_batch: Tensor
+        ):
+            
+            reward_batch = reward_batch.squeeze()
+            
+            qf_1, qf_2 = critic(state_batch, action_batch)
+            qf = qf_1 + qf_2  
+            qf_loss = F.mse_loss(qf, reward_batch)   
+            
+            (qf_loss / self.accumulate_grads).backward()
+
+            return qf_loss
+        
+        return train_step
 
 
     @torch.no_grad()
@@ -153,16 +180,20 @@ class PQN(object):
             )
         
         action_batch = TextMemoryItem(
-            index=torch.tensor(action_batch.index[:-1], device=action_batch.input_ids.device, dtype=torch.float32), 
+            index=None,
+            position=torch.tensor(action_batch.position[:-1], device=action_batch.input_ids.device, dtype=torch.float32), 
             input_ids=action_batch.input_ids[:-1],
             attention_mask=action_batch.attention_mask[:-1],
             text=None
         )
         
-        #self.critic_optim.zero_grad()
-        qf_loss = train_step(self.critic, state_batch, action_batch, targets) #computes backward inside
-        qf_loss = qf_loss / self.accumulate_grads
-        qf_loss.backward()
+        # self.critic_optim.zero_grad()
+        torch.compiler.cudagraph_mark_step_begin()
+        qf_loss = self.train_step(self.critic, state_batch, action_batch, targets) #computes backward inside
+        # qf_loss = qf_loss / self.accumulate_grads
+        # qf_loss.backward()
+        # self.critic_optim.step()
+        # self.scheduler.step()
 
         self._update_step += 1
         if self._update_step % self.accumulate_grads == 0:
@@ -171,7 +202,7 @@ class PQN(object):
             self.scheduler.step()
             self.critic_optim.zero_grad()
 
-            self.alpha = self.alpha_start * self.scheduler.get_lr()[0] / self.start_lr
+            self.alpha = self.alpha_start * float(self.scheduler.get_lr()[0]) / self.start_lr
             self.v_net_target.update(self.critic, self.tau)
             self.action_embed_target.update(self.critic, self.tau)
             self.policy.update(self.critic)

@@ -13,13 +13,10 @@ from functools import reduce
 
 
 os.environ['TOKENIZERS_PARALLELISM'] = 'true'
-MAX_TOKEN_LENGTH = {
-    "state": 512,
-    "action": 64
-}
+MAX_TOKEN_LENGTH = {}
 
 TextMemory = namedtuple("TextMemory", ["item_ids", "available_ids", "available_mask", "input_ids", "attention_mask", "text"]) 
-TextMemoryItem = namedtuple("TextMemoryItem", ["index", "input_ids", "attention_mask", "text"]) 
+TextMemoryItem = namedtuple("TextMemoryItem", ["index", "position", "input_ids", "attention_mask", "text"]) 
 Transition = namedtuple("Transition", [
    "state", "action", "reward", "next_state", "done", "new_state", "embeds", "q_values"
 ])
@@ -28,16 +25,21 @@ TrainBatch = namedtuple("TrainBatch", [
 ])
 
 
+@torch.no_grad()
 def pad_sequence_power_2(seq_list: List[Tensor], padding_value, batch_first=True):
     max_len = max(map(len, seq_list))
     max_len_2 = 2 ** int(np.ceil(np.log2(max_len)))
+    # seq_list = [t.clone() for t in seq_list]
     pad_1 = pad_sequence(seq_list, batch_first=batch_first, padding_value=padding_value)
     pad_2 = torch.nn.functional.pad(pad_1, [0, 0] * (len(pad_1.shape)-2) + [0, max_len_2 - max_len] + [0, 0], value=padding_value)
     assert pad_2.shape[1] == max_len_2
     return pad_2
 
 
-def stack_memory(memory: List[TextMemory], tokenizer: PreTrainedTokenizer, max_length=MAX_TOKEN_LENGTH["state"], device=None):
+def stack_memory(memory: List[TextMemory], tokenizer: PreTrainedTokenizer, max_length=None, device=None):
+
+    if not max_length:
+        max_length = MAX_TOKEN_LENGTH["state"]
 
     if device is None:
         device = torch.get_default_device()
@@ -73,7 +75,10 @@ def stack_memory(memory: List[TextMemory], tokenizer: PreTrainedTokenizer, max_l
     return s_memory
     
 
-def stack_actions(actions: List[TextMemoryItem], tokenizer, max_length=MAX_TOKEN_LENGTH["action"], device=None):
+def stack_actions(actions: List[TextMemoryItem], tokenizer, max_length=None, device=None):
+
+    if not max_length:
+        max_length = MAX_TOKEN_LENGTH["action"]
 
     if device is None:
         device = torch.get_default_device()
@@ -94,6 +99,7 @@ def stack_actions(actions: List[TextMemoryItem], tokenizer, max_length=MAX_TOKEN
     
     a_block = TextMemoryItem(
         index=[si.index for si in actions],
+        position=[si.position for si in actions],
         input_ids=input_ids.to(device),
         attention_mask=attention_mask.to(device),
         text=[si.text for si in actions]
@@ -102,7 +108,10 @@ def stack_actions(actions: List[TextMemoryItem], tokenizer, max_length=MAX_TOKEN
     return a_block
 
 
-def stack_text_list(text_array: List[str], tokenizer, max_length=MAX_TOKEN_LENGTH["action"], device=None):
+def stack_text_list(text_array: List[str], tokenizer, max_length=None, device=None):
+
+    if not max_length:
+        max_length = MAX_TOKEN_LENGTH["action"]
 
     if device is None:
         device = torch.get_default_device()
@@ -133,31 +142,17 @@ def get_randomized_idx(n, max_indent=1000, num_splits=5):
 
 
 def relative_positions(indices, n):
-    """
-    Compute relative positions in range 0 to len(indices) based on given indices.
     
-    Parameters:
-    indices (list): List of indices where the relative position changes
-    n (int): Length of the output array
-    
-    Returns:
-    numpy.ndarray: Array of relative indices
-    
-    Example:
-    >>> relative_index([2, 5, 7], 10)
-    array([0, 0, 1, 1, 1, 2, 2, 3, 3, 3])
-    """
-    
-    result = np.zeros(n, dtype=int)
+    result = np.zeros(n, dtype=np.float32)
     sorted_indices = sorted(indices) + [n]
     current_value = 0
     start = 0
     
     for end in sorted_indices:
         if end > start:
-            result[start:end] = current_value
-            current_value += 1
+            result[start:end] = np.sqrt(np.linspace(0, 81, end - start)) + current_value
             start = end
+        current_value += 10.0
     
     return result
 
@@ -165,20 +160,26 @@ def relative_positions(indices, n):
 class TextEnv:
 
     separator = " [SEP] "
-    max_embed_length = MAX_TOKEN_LENGTH["state"]
-    action_embed_length = MAX_TOKEN_LENGTH["action"]
+    # max_embed_length = MAX_TOKEN_LENGTH["state"]
+    # action_embed_length = MAX_TOKEN_LENGTH["action"]
     max_batch_size = 256
     max_chunks_count = 1000
-    index_type = "random" # "absolute", "relative"
+    index_type = "relative" # "absolute", "relative"
 
     @torch.no_grad()
     def get_extra_embeds(self, tokenizer, embedder: nn.Module, embedder_target: nn.Module) -> np.ndarray:
         #TODO: add random pos indexing for chunks
-        batch = stack_text_list(list(self.all_texts), tokenizer, max_length=self.action_embed_length)
+        batch = stack_text_list(list(self.all_texts), tokenizer)
         positions = torch.tensor(self.positions, device=torch.get_default_device())
         embeds, embeds_target = embedder(**batch, positions=positions), embedder_target(**batch, positions=positions)
 
         return embeds, embeds_target
+    
+    @torch.no_grad()
+    def update_embeds(self, embeds, embedder: nn.Module):
+        positions = torch.tensor(self.positions, device=torch.get_default_device())
+        embeds = embedder.update_pos(embeds, positions=positions)
+        return embeds
     
     @abstractmethod
     def reset(self) -> TextMemory: pass
@@ -214,7 +215,8 @@ class TextEnv:
         elif self.index_type == "absolute":
             self.positions = list(range(len(text_array)))
         elif self.index_type == "relative":
-            self.positions = np.zeros(len(text_array)).tolist()
+            # self.positions = np.ones(len(text_array)).tolist()
+            self.positions = np.sqrt(np.linspace(0, 81, len(text_array)))
 
         # tokens = self.tokenize(question, self.action_embed_length)
         # self.action_tokens = self.tokenize_list(text_array)
@@ -240,7 +242,8 @@ class TextEnv:
         # action_tokens = self.action_tokens[action]
 
         memory_item = TextMemoryItem(
-            index=self.positions[action], 
+            index=action, 
+            position=self.positions[action],
             input_ids=None,
             attention_mask=None,
             text=action_text
@@ -265,6 +268,7 @@ class TextEnv:
 
         if self.index_type == "relative":
             self.positions = relative_positions([it.index for it in self.items_dict], len(self.positions))
+            # print([it.index for it in self.items_dict], self.positions)
 
         return self.memory, memory_item, done
     
@@ -280,6 +284,7 @@ class ParallelTextEnv:
         self.action_tokenizer = action_tokenizer
 
         self.tmp_data = [[] for _ in range(len(self.text_envs))]
+        # self.episodes = []
 
     def reset(self):
         memory = [e.reset() for e in self.text_envs]
@@ -332,8 +337,14 @@ class ParallelTextEnv:
 
         while size < n:
 
-            embeds_pt = pad_sequence_power_2(a_embeds, padding_value=0.0, batch_first=True)
-            embeds_target_pt = pad_sequence_power_2(a_embeds_target, padding_value=0.0, batch_first=True)
+            a_embeds = self.update_embeds(a_embeds, agent.critic.action_embed)
+            a_embeds_target = self.update_embeds(a_embeds_target, agent.action_embed_target)
+
+            a_embeds_pos = [emb["rope"] for emb in a_embeds]
+            a_embeds_target_pos = [emb["rope"] for emb in a_embeds_target]
+             
+            embeds_pt = pad_sequence_power_2(a_embeds_pos, padding_value=0.0, batch_first=True)
+            embeds_target_pt = pad_sequence_power_2(a_embeds_target_pos, padding_value=0.0, batch_first=True)
         
             action, _, q_values  = agent.select_action_batch(s_par, embeds_pt, embeds_target_pt, random=random)
             action = action.cpu().numpy().reshape(-1)
@@ -350,6 +361,8 @@ class ParallelTextEnv:
                     episodes.append(self.tmp_data[i])
                     size += len(self.tmp_data[i])
                     self.tmp_data[i] = []
+                    # if len(self.episodes) > 20:
+                    #     self.episodes = self.episodes[1:]
         
             s_seq = new_state_seq
             s_par = stack_memory(s_seq, self.state_tokenizer)
@@ -357,7 +370,10 @@ class ParallelTextEnv:
         s_seq, a_seq, r_seq, s_next_seq, not_dones_seq, q_seq = [], [], [], [], [], [] 
         r_sum = 0.0
 
-        for tr in reduce(lambda e1, e2: e1 + e2, episodes):
+        all_episodes = reduce(lambda e1, e2: e1 + e2, episodes)
+        # offset = np.random.randint(0, max(len(all_episodes) - n, 1))
+
+        for tr in all_episodes:
             s_seq.append(tr.state)
             a_seq.append(tr.action)
             s_next_seq.append(tr.next_state)
@@ -405,6 +421,16 @@ class ParallelTextEnv:
         # embeds_target = pad_sequence_power_2(embeds_target, padding_value=0.0, batch_first=True)
 
         return list(embeds), list(embeds_target)
+    
+    @torch.no_grad()
+    def update_embeds(self, embeds, embedder: nn.Module) -> np.ndarray:
+
+        new_embeds = []
+        
+        for emb, env in zip(embeds, self.text_envs):
+            new_embeds.append(env.update_embeds(emb, embedder))
+            
+        return new_embeds
 
 
 class TextReplayBuffer(ReplayBuffer):

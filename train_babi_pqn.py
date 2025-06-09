@@ -29,8 +29,11 @@ def evaluate(env_test, agent):
     a_embeds_t, a_embeds_target_t = env_test.get_extra_embeds(agent.action_tokenizer, agent.critic.action_embed, agent.action_embed_target)
     r_sum_t = 0
     while not done_t:
-        action_t, _, _ = agent.select_action(s_t, a_embeds_t, a_embeds_target_t, random=False, evaluate=True)
-        s_t, _, reward_t, done_t = env_test.step(action_t)
+        a_embeds_t = env_test.update_embeds(a_embeds_t, agent.critic.action_embed)
+        a_embeds_target_t = env_test.update_embeds(a_embeds_target_t, agent.action_embed_target)
+        
+        action_t, _, _ = agent.select_action(s_t, a_embeds_t["rope"], a_embeds_target_t["rope"], random=False, evaluate=True)
+        s_t, _, reward_t, done_t = env_test.step(action_t.item())
         r_sum_t += reward_t
     
     return r_sum_t
@@ -143,13 +146,13 @@ for it in progress_bar:
             'qf_loss': qf_loss,
             'step': step,
         })
-        agent.save(ckpt_last_path)
+        # agent.save(ckpt_last_path)
         #torch.save(agent.state_dict(), ckpt_last_path)
 
         mean_eval_reward = np.mean(r_eval)
         if mean_eval_reward > best_eval_reward:
             best_eval_reward = mean_eval_reward
-            agent.save(ckpt_best_path)
+            # agent.save(ckpt_best_path)
             #torch.save(agent.state_dict(), ckpt_best_path)
             #print(f"[INFO] New best model saved with reward {best_eval_reward:.3f}")
 

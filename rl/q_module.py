@@ -43,7 +43,8 @@ class TextQNet(nn.Module):
     def forward(self, s: TextMemory, a: TextMemoryItem): 
         s_embed = self.state_embed(input_ids=s.input_ids, attention_mask=s.attention_mask)
         # self.action_embed.eval()
-        a_embed = self.action_embed(input_ids=a.input_ids, attention_mask=a.attention_mask, positions=a.index)
+        a_embed = self.action_embed(input_ids=a.input_ids, attention_mask=a.attention_mask, positions=a.position)["rope"]
+        # a_embed = self.action_embed.update_pos(a_embed, positions=a.position)
         
         D = s_embed.shape[-1] // 2
         logits_1 = (s_embed[:, :D] * a_embed[:, :D]).sum(-1) 
@@ -80,6 +81,11 @@ class ActionEmbedTarget(nn.Module):
     @torch.no_grad()
     def forward(self, *args, **kw):
         return self.action_embed.forward(*args, **kw)
+    
+    @torch.no_grad()
+    def update_pos(self, *args, **kw):
+        return self.action_embed.update_pos(*args, **kw)
+
 
 
 class TextQNetPolicy(nn.Module):
