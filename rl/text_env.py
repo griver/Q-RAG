@@ -124,7 +124,11 @@ def stack_text_list(text_array: List[str], tokenizer, max_length=MAX_TOKEN_LENGT
 
 def get_randomized_idx(n, max_indent=1000, num_splits=5):
     "returns indices in range from 0 to max_indent+n"
-    indents = sorted(np.random.choice(max_indent, size=num_splits))
+    if max_indent <= 0:
+        indents = [0]*num_splits
+    else:
+        indents = sorted(np.random.choice(max_indent, size=num_splits))
+    
     idx = np.arange(n)
     split_id = sorted(np.random.choice(idx[1:n-1], size=num_splits-1, replace=False))
     splits  = np.split(idx, split_id)
@@ -210,6 +214,7 @@ class TextEnv:
         self.items_dict = SortedList(key=lambda memory_item: memory_item.index)
 
         if self.index_type == "random":
+            assert self.max_chunks_count - len(text_array) >= 0, f'num_chunks(len(text_array)) > envs.max_chunks_count. Increase envs.max_chunks_count!' 
             self.positions = get_randomized_idx(len(text_array), max_indent=self.max_chunks_count - len(text_array))
         elif self.index_type == "absolute":
             self.positions = list(range(len(text_array)))
