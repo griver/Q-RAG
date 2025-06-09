@@ -54,14 +54,18 @@ class BabilongEnv(TextEnv):
                  max_steps = 3,
                  max_chunks_count = 1000,
                  index_type = "random", # "absolute", "relative"
-                 reward_model = GroundTruthReward()):
+                 reward_model = GroundTruthReward(),
+                 max_embedding_batch = 500,
+                 ):
         
         super().__init__()
 
         self.dataset = dataset
         self.max_steps = max_steps
         self.max_chunks_count = max_chunks_count
+        self.max_embedding_batch = max_embedding_batch
         self.index_type = index_type
+
         # self.max_embed_length = max_embed_length
         # self.action_embed_length = action_embed_length
         self.reward_model = reward_model

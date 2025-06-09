@@ -167,7 +167,7 @@ class TextEnv:
     separator = " [SEP] "
     max_embed_length = MAX_TOKEN_LENGTH["state"]
     action_embed_length = MAX_TOKEN_LENGTH["action"]
-    max_batch_size = 256
+    max_embedding_batch = 500
     max_chunks_count = 1000
     index_type = "random" # "absolute", "relative"
 
@@ -176,7 +176,22 @@ class TextEnv:
         #TODO: add random pos indexing for chunks
         batch = stack_text_list(list(self.all_texts), tokenizer, max_length=self.action_embed_length)
         positions = torch.tensor(self.positions, device=torch.get_default_device())
-        embeds, embeds_target = embedder(**batch, positions=positions), embedder_target(**batch, positions=positions)
+
+        max_B = self.max_embedding_batch
+        B, D = batch['input_ids'].shape #will brake if num dimenstions is not equal to 2. this is desirable behavior
+        if B <= max_B:
+            embeds = embedder(**batch, positions=positions)
+            embeds_target = embedder_target(**batch, positions=positions)
+        else:
+            assert B == len(positions)
+            embeds, embeds_target = [], []
+            for i in range(0, B, max_B):
+                inputs = (batch['input_ids'][i:i + max_B], batch['attention_mask'][i:i+max_B], positions[i:i+max_B])
+                embeds.append( embedder(*inputs) )
+                embeds_target.append( embedder_target(*inputs) )
+
+            embeds = torch.cat(embeds, dim=0)
+            embeds_target = torch.cat(embeds_target, dim=0)
 
         return embeds, embeds_target
     
