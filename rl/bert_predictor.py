@@ -104,9 +104,13 @@ class PositionalRotaryEmbedding(rotary_embedding_torch.RotaryEmbedding):
                  cache_if_possible=True, 
                  cache_max_seq_len=8192):
         super().__init__(dim, custom_freqs, freqs_for, theta, max_freq, num_freqs, 
-                         learned_freq, use_xpos, xpos_scale_base, interpolate_factor, 
+                         learned_freq, use_xpos, xpos_scale_base, 1, #set interpolate_factor to 1. to ignore assert requiring interpolate factor >= 1 
                          theta_rescale_factor, seq_before_head_dim, cache_if_possible, cache_max_seq_len)
-        print('interpolate factor:', interpolate_factor)
+        
+        assert interpolate_factor > 0.
+        self.interpolate_factor = interpolate_factor
+        print('interpolate factor:', self.interpolate_factor)
+        
         freqs = self.freqs
         positions = torch.arange(cache_max_seq_len, device = torch.get_default_device())
 

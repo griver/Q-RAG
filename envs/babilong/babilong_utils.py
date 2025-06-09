@@ -60,7 +60,13 @@ class TaskDataset(Dataset):
     def __getitem__(self, ind):
         slc = self.fact_dataset[self.fact_dataset.sample_num == ind]
         references = slc[slc.phrase_num.isin(slc.reference_num.values[-1])].text.values
-        references_idx = np.nonzero(slc.phrase_num.isin(slc.reference_num.values[-1]))[0]
+        # print("slc.reference_num.values[-1]:", slc.reference_num.values[-1])
+        # print('slc.phrase_num:', np.array(slc.phrase_num))
+        # print('slc.phrase_num.isin(slc.reference_num.values[-1]):\n', slc.phrase_num.isin(slc.reference_num.values[-1]))
+        # print('=== completed ===')
+        references_idx = np.nonzero(
+            np.asarray(slc.phrase_num.isin(slc.reference_num.values[-1]))
+        )[0]
         sample = {
             'facts': slc.text.values[:-1],
             'question': slc.text.values[-1],

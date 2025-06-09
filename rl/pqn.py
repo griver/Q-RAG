@@ -217,7 +217,7 @@ class PQN(object):
         if not os.path.isfile(checkpoint_path):
             raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
 
-        checkpoint = torch.load(checkpoint_path, map_location=torch.get_default_device())
+        checkpoint = torch.load(checkpoint_path, map_location=torch.get_default_device(), weights_only=False)
 
         self.critic.load_state_dict(checkpoint["critic"], strict=strict)
         self.policy.load_state_dict(checkpoint["policy"], strict=strict)
