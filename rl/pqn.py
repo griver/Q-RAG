@@ -1,5 +1,6 @@
 from functools import partial
 import os
+from typing import Tuple
 import torch
 from torch import nn, Tensor
 from torch import optim
@@ -10,7 +11,7 @@ from rl.bert_predictor import EmbedderWithPosEncoding
 from rl.text_env import pad_sequence_power_2
 from rl.sarsa import set_optim
 from .q_module import TextQNet, TextQNetPolicy, TextRandomPolicy, ActionEmbedTarget, TextMaxQNet, TextVNet
-from .text_env import TextMemory, TextMemoryItem, stack_memory
+from .text_env import TextMemory, TextMemoryItem, stack_memory, stack_text_list
 import copy
 from omegaconf import DictConfig, OmegaConf
 from hydra.utils import instantiate
@@ -36,7 +37,7 @@ from hydra.utils import instantiate
 #     return qf_loss, critic
 
 
-# @partial(torch.compile)
+@partial(torch.compile)
 def policy_apply(policy, v_net, state, a_embeds,  a_embeds_target, alpha, return_argmax: bool):
     action, q_values = policy(state, a_embeds, alpha, return_argmax)
     v1, v2 = v_net(state, a_embeds_target, alpha=alpha / 10)
@@ -248,7 +249,7 @@ class PQN(object):
         if not os.path.isfile(checkpoint_path):
             raise FileNotFoundError(f"Checkpoint not found: {checkpoint_path}")
 
-        checkpoint = torch.load(checkpoint_path, map_location=torch.get_default_device())
+        checkpoint = torch.load(checkpoint_path, map_location=torch.get_default_device(), weights_only=False)
 
         self.critic.load_state_dict(checkpoint["critic"], strict=strict)
         self.policy.load_state_dict(checkpoint["policy"], strict=strict)
@@ -268,3 +269,56 @@ class PQN(object):
         self.alpha = checkpoint.get("alpha", self.alpha)
 
         print(f"[INFO] PQN checkpoint loaded  ← {checkpoint_path}")
+
+
+class PQNActor:
+
+    def __init__(self, agent: PQN):
+        self.agent = agent
+        self.embeds = []
+        self.embeds_target = []
+
+    @torch.no_grad()
+    def get_embeds(self, all_texts, positions) -> Tuple[Tensor, Tensor]:
+        tokenizer = self.agent.action_tokenizer
+        embedder = self.agent.critic.action_embed
+        embedder_target = self.agent.action_embed_target
+
+        batch = stack_text_list(list(all_texts), tokenizer)
+        positions = torch.tensor(positions, device=torch.get_default_device())
+        embeds, embeds_target = embedder(**batch, positions=positions), embedder_target(**batch, positions=positions)
+
+        return embeds, embeds_target
+    
+    @torch.no_grad()
+    def update_embeds(self, k, positions):
+        positions = torch.tensor(positions, device=torch.get_default_device())
+        embedder = self.agent.critic.action_embed
+        embedder_target = self.agent.action_embed_target
+        self.embeds[k] = embedder.update_pos(self.embeds[k], positions=positions)
+        self.embeds_target[k] = embedder_target.update_pos(self.embeds_target[k], positions=positions)
+        
+    def step(self, s_seq, chunks, positions, is_random):
+        for k, ch, pos in zip(range(len(chunks)), chunks, positions):
+            if ch is not None:
+                self.embeds[k], self.embeds_target[k] = self.get_embeds(ch, pos)
+            if pos is not None:
+                self.update_embeds(k, pos)
+
+        s_par = stack_memory(s_seq, self.state_tokenizer)
+        
+        a_embeds_pos = [emb["rope"] for emb in self.embeds]
+        a_embeds_target_pos = [emb["rope"] for emb in self.embeds_target]
+             
+        embeds_pt = pad_sequence_power_2(a_embeds_pos, padding_value=0.0, batch_first=True)
+        embeds_target_pt = pad_sequence_power_2(a_embeds_target_pos, padding_value=0.0, batch_first=True)
+        
+        action, _, q_values  = self.agent.select_action_batch(s_par, embeds_pt, embeds_target_pt, random=is_random)
+        
+        return action, q_values
+            
+        
+
+
+
+

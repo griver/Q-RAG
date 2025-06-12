@@ -216,7 +216,7 @@ class TextEnv:
             self.positions = list(range(len(text_array)))
         elif self.index_type == "relative":
             # self.positions = np.ones(len(text_array)).tolist()
-            self.positions = np.sqrt(np.linspace(0, 81, len(text_array)))
+            self.positions = np.linspace(0, 9, len(text_array))
 
         # tokens = self.tokenize(question, self.action_embed_length)
         # self.action_tokens = self.tokenize_list(text_array)

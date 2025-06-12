@@ -60,12 +60,22 @@ class TaskDataset(Dataset):
     def __getitem__(self, ind):
         slc = self.fact_dataset[self.fact_dataset.sample_num == ind]
         references = slc[slc.phrase_num.isin(slc.reference_num.values[-1])].text.values
-        sample = {'facts': slc.text.values[:-1],
-                  'question': slc.text.values[-1],
-                  'answer': slc.answer.values[-1],
-                  'references': references}
+        references_idx = np.nonzero(slc.phrase_num.isin(slc.reference_num.values[-1]))[0]
+        sample = {
+            'facts': slc.text.values[:-1],
+            'question': slc.text.values[-1],
+            'answer': slc.answer.values[-1],
+            'references': references,
+            'references_idx': references_idx,
+        }
+
+        self._check_ref_id(sample)
         return sample
-    
+
+    def _check_ref_id(self, sample):
+         ref_from_id = sample['facts'][sample['references_idx']]
+         assert np.array_equal(ref_from_id, sample['references']), 'references_idx should point to the same text as refererences!'
+
     def __len__(self):
         return self.fact_dataset.sample_num.max()
 

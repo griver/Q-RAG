@@ -9,6 +9,7 @@ import numpy as np
 import torch
 from omegaconf import OmegaConf
 from hydra.utils import instantiate
+from torchvision.ops.misc import interpolate
 from tqdm import tqdm
 
 # ---- add repository root to PYTHONPATH (so that rl.* modules resolve) ---- #
@@ -35,13 +36,36 @@ def set_all_seeds(seed: int) -> None:
     torch.backends.cudnn.benchmark = False
 
 
-def prepare_config(cfg, max_steps: int, num_sentences: int):
-    """Apply CLI overrides to the loaded config in‑place and return it."""
-    # Override only test‑environment‑specific fields so that the training
-    # configuration remains untouched.
-    cfg.envs.test_env.max_steps = max_steps
-    cfg.envs.test_env.dataset.num_sentences = num_sentences
-    return cfg
+# def prepare_eval_config(eval_cfg, train_cfg):
+#     """Compute additional complex value changes"""
+#     # Override only test‑environment‑specific fields so that
+#     # the training configuration remains untouched.
+#     max_chunks_count = eval_cfg.envs.get("max_chunks_count", None)
+#     max_seq_len = eval_cfg.algo.model.predictor.get("max_seq_len", None)
+#     interpolate_factor = eval_cfg.algo.model.predictor.get("interpolate_factor", None)
+#
+#     assert max_chunks_count == max_seq_len == interpolate_factor == None, \
+#         'If you specified at least one of the [envs.max_chunks_count, algo.model.predictor.max_seq_len, algo.model.predictor.interpolate_factor] then you should also specify others'
+#
+#     eval_max_chunks = eval_cfg.envs.num_sentences
+#     if train_cfg.index_type == 'random':
+#             train_max_chunks = train_cfg.envs.max_chunks_count
+#     elif train_cfg.index_type == 'absolute':
+#             train_max_chunks = train_cfg.envs.num_sentences
+#
+#     if eval_max_chunks > train_max_chunks:
+#         eval_cfg.envs.max_chunks_count = eval_max_chunks + 1
+#         eval_cfg.algo.model.predictor.max_seq_len = max(eval_max_chunks + 1, train_cfg.algo.model.predictor.max_seq_len)
+#         eval_cfg.algo.model.predictor.interpolate_factor = eval_max_chunks / train_max_chunks
+#         print(f'Current indexing type is {train_cfg.index_type}')
+#         print(
+#             "The following parameters are updated:",
+#             f"...eval_cfg.envs.max_chunks_count={eval_cfg.envs.max_chunks_count}",
+#             f"...eval_cfg.algo.model.predictor.max_seq_len={eval_cfg.algo.model.predictor.max_seq_len}",
+#             f"...eval_cfg.algo.model.predictor.interpolate_factor={eval_cfg.algo.model.predictor.interpolate_factor}",
+#             sep='\n')
+#
+#     return eval_cfg
 
 def calc_fact_f1_em(predicted_support_idxs, gt_support_idxs):
     # Taken from hotpot_eval
@@ -76,7 +100,7 @@ def evaluate_episode(env: BabilongEnv, agent: PQN) -> float:
     done = False
 
     # Pre‑compute static embeddings that do not change during an episode
-    extra_embeds = env.get_extra_embeds(
+    embeds, embeds_target = env.get_extra_embeds(
         agent.action_tokenizer,
         agent.critic.action_embed,
         agent.action_embed_target,
@@ -84,9 +108,13 @@ def evaluate_episode(env: BabilongEnv, agent: PQN) -> float:
     episode_return = 0.0
 
     while not done:
+
+        embeds = env.update_embeds(embeds, agent.critic.action_embed)
+        embeds_target = env.update_embeds(embeds_target, agent.action_embed_target)
+
         action, _, _ = agent.select_action(
             state,
-            *extra_embeds,
+            embeds["rope"], embeds_target["rope"],
             random=False,
             evaluate=True,
         )
@@ -105,75 +133,56 @@ def evaluate_episode(env: BabilongEnv, agent: PQN) -> float:
     }
 
 
-# ---------------------------------------------------------------------------
-# Main
-# ---------------------------------------------------------------------------
+def load_eval_config(name):
+    cli_cfg = OmegaConf.from_cli()
+    eval_cfg = OmegaConf.load(name)
+    eval_cfg = OmegaConf.merge(eval_cfg, cli_cfg)
 
-def main(argv: List[str] | None = None) -> None:  # noqa: D401
-    parser = argparse.ArgumentParser(description="Evaluate a trained PQN agent on the Babilong environment.")
-    parser.add_argument("savedir", type=str,
-        help=("Directory containing the training artefacts (config.yaml, " 
-              "model_best.pt, model_last.pt)."),
-        )
-    parser.add_argument("--num_samples", type=int, default=1000, help="Number of evaluation episodes.")
-    parser.add_argument("--max_steps", type=int, default=6, help="Max steps per episode (override).")
-    parser.add_argument("--num_sentences", type=int, default=50, help="Number of sentences in a sample (override).",)
-    parser.add_argument("--use_last",action="store_true", help="Load weights from model_last.pt instead of model_best.pt.",)
-    parser.add_argument("--seed", type=int, default=42, help="Random seed.")
-    args = parser.parse_args(argv)
-
-    # -----------------------------------------------------------------------
-    # 1. Load config
-    # -----------------------------------------------------------------------
-    config_path = os.path.join(args.savedir, "config.yaml")
-    if not os.path.exists(config_path):
-        raise FileNotFoundError(f"Could not find config.yaml at {config_path}")
-
-    cfg = OmegaConf.load(config_path)
-    cfg = prepare_config(cfg, args.max_steps, args.num_sentences)
+    train_cfg_path = os.path.join(eval_cfg.pretrained_path, 'config.yaml')
+    if not os.path.exists(train_cfg_path):
+        raise FileNotFoundError(f"Could not find config.yaml at {train_cfg_path}")
+    train_cfg = OmegaConf.load(train_cfg_path)
+    #prepare_eval_config(eval_cfg, train_cfg)
+    cfg = OmegaConf.merge(train_cfg, eval_cfg)
     OmegaConf.resolve(cfg)
+    return cfg
 
-    # hydra.utils.instantiate needs the full objects, so keep OmegaConf.
-
+def main(argv: List[str] | None = None) -> None:
+    cfg = load_eval_config("configs/testing.yaml")
     # Set global MAX_TOKEN_LENGTH constants before tokenisers are built
     MAX_TOKEN_LENGTH["state"] = cfg.max_state_length
     MAX_TOKEN_LENGTH["action"] = cfg.max_action_length
 
-    # -----------------------------------------------------------------------
-    # 2. Set seeds & device
-    # -----------------------------------------------------------------------
-    set_all_seeds(args.seed)
+
+    set_all_seeds(cfg.seed)
 
     # Respect the device stored in the training config; fall back to CPU if absent
     torch.set_default_device(getattr(cfg, "device", "cpu"))
     torch.set_float32_matmul_precision("high")
 
     # -----------------------------------------------------------------------
-    # 3. Build agent & load checkpoint
+    # Build agent & load checkpoint
     # -----------------------------------------------------------------------
     agent = PQN(cfg.algo)
 
-    ckpt_filename = "model_last.pt" if args.use_last else "model_best.pt"
-    ckpt_path = os.path.join(args.savedir, ckpt_filename)
+    ckpt_filename = "model_last.pt" if cfg.use_last else "model_best.pt"
+    ckpt_path = os.path.join(cfg.pretrained_path, ckpt_filename)
     if not os.path.exists(ckpt_path):
         raise FileNotFoundError(f"Checkpoint not found: {ckpt_path}")
 
     agent.load(ckpt_path, strict=True)
     agent.eval()
 
-    # -----------------------------------------------------------------------
-    # 4. Build test environment
-    # -----------------------------------------------------------------------
     env_test: BabilongEnv = instantiate(cfg.envs.test_env)
 
     # -----------------------------------------------------------------------
-    # 5. Evaluate
+    # Evaluate
     # -----------------------------------------------------------------------
     returns = []
     text_lens = []
     all_em = []
     all_f1 = []
-    for _ in tqdm(range(args.num_samples), desc="Evaluating", ncols=80):
+    for _ in tqdm(range(cfg.num_samples), desc="Evaluating", ncols=80):
         res = evaluate_episode(env_test, agent)
         returns.append(res['return'])
         text_lens.append(res['text_len'])
@@ -186,7 +195,7 @@ def main(argv: List[str] | None = None) -> None:  # noqa: D401
     fact_f1 = sum(all_f1) / len(all_f1)
 
     print(
-        f"Evaluated on {args.num_samples} episodes, max_retrieves={args.max_steps} | "
+        f"Evaluated on {cfg.num_samples} episodes, max_retrieves={cfg.envs.max_steps} | "
         f"Mean return: {mean_return:.3f} ± {std_return:.3f} (std) | "
         f"Mean text len: {np.mean(text_lens):.2f} | "
         f"EM: {fact_em:.3f} | F1: {fact_f1:.3f}"
