@@ -5,7 +5,7 @@ import torch.nn.functional as F
 from torch.optim import Adam, AdamW
 from torch import optim
 from collections import namedtuple
-from .q_module import TextQNet, TextQNetPolicy, TextRandomPolicy, TextVNet, ActionEmbedTarget
+from ..q_module import TextQNet, TextQNetPolicy, TextRandomPolicy, TextVNet, ActionEmbedTarget
 from .text_env import TextMemory, TextMemoryItem
 import copy
 import math

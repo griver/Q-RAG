@@ -14,8 +14,8 @@ from envs.babilong.babilong_utils import TaskDataset
 from torch.utils.tensorboard import SummaryWriter
 import datasets
 import numpy as np
-from rl.babilong_env import BabilongEnv
-from rl.sacd import SAC, SACArgs
+from envs.babilong_env import BabilongEnv
+from rl.agents.sacd import SAC, SACArgs
 # from rl.sarsa import SARSA, SARSAArgs
 from transformers import AutoModel, AutoTokenizer
 from rl.bert_predictor import BertPredictor

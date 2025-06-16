@@ -7,8 +7,8 @@ import torch.nn.functional as F
 from torch.optim import Adam, AdamW
 from collections import namedtuple
 
-from rl.sarsa import LinearAnnealingVal, set_optim
-from .q_module import TextQNet, TextQNetPolicy, TextRandomPolicy, ActionEmbedTarget, TextMaxQNet, TextVNet
+from rl.agents.sarsa import LinearAnnealingVal, set_optim
+from ..q_module import TextQNet, TextQNetPolicy, TextRandomPolicy, ActionEmbedTarget, TextMaxQNet, TextVNet
 from .text_env import TextMemory, TextMemoryItem
 import copy
 import numpy as np

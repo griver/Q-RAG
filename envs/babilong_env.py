@@ -3,10 +3,9 @@ from collections import namedtuple
 from typing import Tuple, Dict, List, Any, Union
 import torch.utils
 from nltk.probability import gt_demo
-
-# from rl.jax_text_env import TextEnv, TextMemory, TextMemoryItem
-from rl.text_env import TextEnv, TextMemory, TextMemoryItem
+from envs.text_env import PositionProcessor, TextEnv
 from transformers import PreTrainedTokenizer, PreTrainedTokenizerFast
+from envs.utils import TextMemory
 
 
 class GroundTruthReward:
@@ -51,20 +50,28 @@ class BabilongEnv(TextEnv):
 
     def __init__(self,
                  dataset,
-                 max_steps = 3,
-                 max_chunks_count = 1000,
-                 index_type = "random", # "absolute", "relative"
-                 reward_model = GroundTruthReward()):
+                 max_steps: int,
+                 positions_processor: PositionProcessor,
+                 state_embed_length: int,
+                 action_embed_length: int,
+                 reward_model = GroundTruthReward(),
+                 max_embedding_batch: int = 500,
+                 separator: str = " [SEP] ",             
+                 sort_by_index: bool = True
+        ):
         
         super().__init__()
 
         self.dataset = dataset
         self.max_steps = max_steps
-        self.max_chunks_count = max_chunks_count
-        self.index_type = index_type
-        # self.max_embed_length = max_embed_length
-        # self.action_embed_length = action_embed_length
+        self.max_embedding_batch = max_embedding_batch
+        self.state_embed_length = state_embed_length
+        self.action_embed_length = action_embed_length
         self.reward_model = reward_model
+        self.positions_processor = positions_processor
+        self.separator = separator
+        self.sort_by_index = sort_by_index
+
 
         self.references = None
         self.question = None
@@ -74,11 +81,17 @@ class BabilongEnv(TextEnv):
         self.num_steps = 0
 
     def copy(self):
-        return BabilongEnv(self.dataset, 
-                           self.max_steps,
-                           self.max_chunks_count,
-                           self.index_type,
-                           self.reward_model)
+        return BabilongEnv(
+            dataset = self.dataset,
+            max_steps = self.max_steps,
+            positions_processor = self.positions_processor,
+            state_embed_length = self.state_embed_length,
+            action_embed_length = self.action_embed_length,
+            reward_model = self.reward_model,
+            max_embedding_batch = self.max_embedding_batch,
+            separator = self.separator,             
+            sort_by_index = self.sort_by_index
+        )
 
     def _init_from_sample(self, sample):
         self.references = list(sample['references'])
@@ -87,19 +100,7 @@ class BabilongEnv(TextEnv):
         self.sentences = np.asarray(sample['chunks'])
         self.facts_idx = list(sample['facts_idx'])
         self.references_idx = sample.get('references_idx')
-        # self.sentences.extend(sample['noise'])
-        # self.sentences.extend(sample['facts'])
-        # self.sentences.extend([
-        #   f"Fact number {i}: "  + str(f) for i, f in enumerate(sample['facts'])
-        # ])
-        # self.ref_ids = []
-        # for i, f in enumerate(sample['facts']):
-        #     if f in self.references:
-        #         self.ref_ids.append(i + len(sample['noise']))
-        #
-        # self.ref_ids = np.array(self.ref_ids)[len(self.ref_ids) - len(self.references):]
-
-
+        
     def reset(self, new_sample=None) -> TextMemory:
         if new_sample is not None:
             self._init_from_sample(new_sample)

@@ -133,7 +133,11 @@ def stack_text_list(text_array: List[str], tokenizer, max_length=None, device=No
 
 def get_randomized_idx(n, max_indent=1000, num_splits=5):
     "returns indices in range from 0 to max_indent+n"
-    indents = sorted(np.random.choice(max_indent, size=num_splits))
+    if max_indent <= 0:
+        indents = [0]*num_splits
+    else:
+        indents = sorted(np.random.choice(max_indent, size=num_splits))
+    
     idx = np.arange(n)
     split_id = sorted(np.random.choice(idx[1:n-1], size=num_splits-1, replace=False))
     splits  = np.split(idx, split_id)
@@ -162,16 +166,31 @@ class TextEnv:
     separator = " [SEP] "
     # max_embed_length = MAX_TOKEN_LENGTH["state"]
     # action_embed_length = MAX_TOKEN_LENGTH["action"]
-    max_batch_size = 256
+    max_embedding_batch = 500
     max_chunks_count = 1000
     index_type = "relative" # "absolute", "relative"
 
     @torch.no_grad()
     def get_extra_embeds(self, tokenizer, embedder: nn.Module, embedder_target: nn.Module) -> np.ndarray:
-        #TODO: add random pos indexing for chunks
+        
         batch = stack_text_list(list(self.all_texts), tokenizer)
         positions = torch.tensor(self.positions, device=torch.get_default_device())
-        embeds, embeds_target = embedder(**batch, positions=positions), embedder_target(**batch, positions=positions)
+
+        max_B = self.max_embedding_batch
+        B, D = batch['input_ids'].shape #will brake if num dimenstions is not equal to 2. this is desirable behavior
+        if B <= max_B:
+            embeds = embedder(**batch, positions=positions)
+            embeds_target = embedder_target(**batch, positions=positions)
+        else:
+            assert B == len(positions)
+            embeds, embeds_target = [], []
+            for i in range(0, B, max_B):
+                inputs = (batch['input_ids'][i:i + max_B], batch['attention_mask'][i:i+max_B], positions[i:i+max_B])
+                embeds.append( embedder(*inputs) )
+                embeds_target.append( embedder_target(*inputs) )
+
+            embeds = torch.cat(embeds, dim=0)
+            embeds_target = torch.cat(embeds_target, dim=0)
 
         return embeds, embeds_target
     
@@ -211,6 +230,7 @@ class TextEnv:
         self.items_dict = SortedList(key=lambda memory_item: memory_item.index)
 
         if self.index_type == "random":
+            assert self.max_chunks_count - len(text_array) >= 0, f'num_chunks(len(text_array)) > envs.max_chunks_count. Increase envs.max_chunks_count!' 
             self.positions = get_randomized_idx(len(text_array), max_indent=self.max_chunks_count - len(text_array))
         elif self.index_type == "absolute":
             self.positions = list(range(len(text_array)))

@@ -60,6 +60,7 @@ pqn:
     tau: 0.02
     max_grad_norm: 2.
     accumulate_grads: ${accumulate_grads}
+    state_embed_length: ${max_state_length}
 
   optimizer:
     _target_: torch.optim.AdamW
@@ -69,7 +70,7 @@ pqn:
     weight_decay: 0.01  
     
   scheduler:
-    _target_: rl.sarsa.WarmupLinearScheduler
+    _target_: rl.optim.WarmupLinearScheduler
     total: ${steps_count}
     ratio: 0.0
     warmup: 1000

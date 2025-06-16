@@ -1,6 +1,6 @@
 from rl.replay_buffer import TextReplayBuffer
 from envs.babilong.retrieval_babilong import RetrievalBabiLong, RetrSentenceSampler
-from rl.agent import RetrievalAgent
+from rl.agents.agent import RetrievalAgent
 from envs.babilong.retrieval_env import RetrievalEnv, RetrievalPolicy, TopKExhaustiveSearch, RewardForFacts
 from envs.babilong.babilong_utils import TaskDataset
 import datasets

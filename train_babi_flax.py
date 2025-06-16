@@ -21,7 +21,7 @@ from torch.utils.tensorboard import SummaryWriter
 import datasets
 from rl.flax_dqn import FlaxDQN, DQNArgs
 import numpy as np
-from rl.babilong_env import BabilongEnv
+from envs.babilong_env import BabilongEnv
 from rl.jax_text_env import TextReplayBuffer
 from tqdm import tqdm
 

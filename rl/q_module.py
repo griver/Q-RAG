@@ -1,7 +1,7 @@
 import numpy as np
 from torch import nn, Tensor
 import torch
-from .text_env import TextMemory, TextMemoryItem
+from envs.utils import TextMemory, TextMemoryItem
 import copy
 
 

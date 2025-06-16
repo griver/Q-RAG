@@ -1,8 +1,8 @@
 import sys
 import os
 
-from rl.dqn import DQN, DQNArgs
-from rl.words_counter_env import WordsCounterEnv
+from rl.agents.dqn import DQN, DQNArgs
+from envs.words_counter_env import WordsCounterEnv
 
 
 repo_dir = os.path.dirname(os.path.abspath("./"))

@@ -8,33 +8,12 @@ import torch.nn.functional as F
 from torch.optim import Adam, AdamW
 from collections import namedtuple
 from rl.bert_predictor import EmbedderWithPosEncoding
-from rl.text_env import pad_sequence_power_2
-from rl.sarsa import set_optim
-from .q_module import TextQNet, TextQNetPolicy, TextRandomPolicy, ActionEmbedTarget, TextMaxQNet, TextVNet
-from .text_env import TextMemory, TextMemoryItem, stack_memory, stack_text_list
+from envs.utils import pad_sequence_power_2, stack_memory, stack_text_list
+from ..q_module import TextQNet, TextQNetPolicy, TextRandomPolicy, ActionEmbedTarget, TextMaxQNet, TextVNet
+from envs.utils import TextMemory, TextMemoryItem
 import copy
 from omegaconf import DictConfig, OmegaConf
 from hydra.utils import instantiate
-
-
-# @partial(torch.compile, mode="reduce-overhead")
-# def train_step(
-#             critic,
-#             state_batch: TextMemory, 
-#             action_batch: TextMemoryItem, 
-#             reward_batch: Tensor,
-#             accumulate_grads
-# ):
-
-#     reward_batch = reward_batch.squeeze()
-    
-#     qf_1, qf_2 = critic(state_batch, action_batch)
-#     qf = qf_1 + qf_2  
-#     qf_loss = F.mse_loss(qf, reward_batch)   
-    
-#     (qf_loss / accumulate_grads).backward()
-#     #doesn't compute grads anymore
-#     return qf_loss, critic
 
 
 @partial(torch.compile)
@@ -43,6 +22,7 @@ def policy_apply(policy, v_net, state, a_embeds,  a_embeds_target, alpha, return
     v1, v2 = v_net(state, a_embeds_target, alpha=alpha / 10)
     q_values_target = v1 + v2
     return action, q_values, q_values_target
+
 
 class PQN(object):
 
@@ -61,6 +41,7 @@ class PQN(object):
         if self.accumulate_grads < 1:
             raise ValueError("cfg.accumulate_gradients must be a positive integer")
         self._update_step = 0  # number of updates from the start of the training
+        self.state_embed_length = config.pqn.hyperparams.state_embed_length
 
         state_embed: nn.Module = instantiate(config.pqn.state_embed)
         action_embed: nn.Module = instantiate(config.pqn.action_embed)
@@ -129,7 +110,7 @@ class PQN(object):
     @torch.no_grad()
     def select_action(self, state: TextMemory, a_embeds: Tensor, a_embeds_target: Tensor, evaluate=False, random=False):
 
-        state = stack_memory([state], self.critic.action_embed.tokenizer)
+        state = stack_memory([state], self.critic.action_embed.tokenizer, max_length=self.state_embed_length)
         a_embeds = pad_sequence_power_2([a_embeds], padding_value=0.0, batch_first=True)
         a_embeds_target = pad_sequence_power_2([a_embeds_target], padding_value=0.0, batch_first=True)
                 

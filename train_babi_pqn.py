@@ -9,10 +9,10 @@ if repo_dir not in sys.path:
 from torch.utils.tensorboard import SummaryWriter
 import torch
 import sys
-from rl.pqn import PQN
+from rl.agents.pqn import PQN
 import numpy as np
-from rl.babilong_env import BabilongEnv
-from rl.text_env import ParallelTextEnv, MAX_TOKEN_LENGTH
+from envs.babilong_env import BabilongEnv
+from envs.parallel_env import ParallelTextEnv
 from tqdm import tqdm
 import torch
 from omegaconf import OmegaConf, DictConfig
@@ -94,8 +94,8 @@ torch.set_default_device(cfg.device)
 torch.set_float32_matmul_precision('high')
 set_all_seeds(cfg.seed)
 
-MAX_TOKEN_LENGTH["state"] = cfg.max_state_length
-MAX_TOKEN_LENGTH["action"] = cfg.max_action_length
+# MAX_TOKEN_LENGTH["state"] = cfg.max_state_length
+# MAX_TOKEN_LENGTH["action"] = cfg.max_action_length
 
 agent = PQN(agent_config)
 

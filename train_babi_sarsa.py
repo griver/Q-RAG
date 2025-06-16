@@ -12,9 +12,9 @@ from envs.babilong.retrieval_babilong import RetrievalBabiLong, RetrSentenceSamp
 from envs.babilong.babilong_utils import TaskDataset
 from torch.utils.tensorboard import SummaryWriter
 import datasets
-from rl.sarsa import SARSA, SARSAArgs
+from rl.agents.sarsa import SARSA, SARSAArgs
 import numpy as np
-from rl.babilong_env import BabilongEnv
+from envs.babilong_env import BabilongEnv
 from transformers import AutoModel, AutoTokenizer
 from rl.bert_predictor import BertPredictor
 from rl.text_env import TextReplayBuffer

@@ -17,9 +17,8 @@ repo_dir = os.path.dirname(os.path.abspath("./"))
 if repo_dir not in sys.path:
     sys.path.append(repo_dir)
 
-from rl.pqn import PQN  # noqa: E402
-from rl.babilong_env import BabilongEnv  # noqa: E402
-from rl.text_env import MAX_TOKEN_LENGTH  # noqa: E402
+from rl.agents.pqn import PQN  # noqa: E402
+from envs.babilong_env import BabilongEnv  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -150,9 +149,8 @@ def load_eval_config(name):
 def main(argv: List[str] | None = None) -> None:
     cfg = load_eval_config("configs/testing.yaml")
     # Set global MAX_TOKEN_LENGTH constants before tokenisers are built
-    MAX_TOKEN_LENGTH["state"] = cfg.max_state_length
-    MAX_TOKEN_LENGTH["action"] = cfg.max_action_length
-
+    # MAX_TOKEN_LENGTH["state"] = cfg.max_state_length
+    # MAX_TOKEN_LENGTH["action"] = cfg.max_action_length
 
     set_all_seeds(cfg.seed)
 
