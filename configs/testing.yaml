@@ -4,7 +4,7 @@ use_last: False
 
 #you can also rewrite any parameter from training config in this config:
 seed: 42
-device: 'cuda:1'
+device: 'cuda:0'
 envs:
   num_sentences: 50
   #max_steps: 6

@@ -6,15 +6,25 @@ noise_test_path: "data/pg19-with-sentences/test"
 facts_train_path: data/tasks_1-20_v1-2/en-10k/${envs.task}_train.txt
 facts_test_path: data/tasks_1-20_v1-2/en-10k/${envs.task}_test.txt
 
+positions_processor: relative
+
+positions_processor_dict:
+  absolute:
+    _target_: envs.text_env.AbsolutePositionProcessor
+  random:
+    _target_: envs.text_env.RandomPositionProcessor
+    max_chunks_count: 1000
+  relative:
+    _target_: envs.text_env.RelativePositionProcessor
+    step_size: 10
+
 # Core Environment Configuration
 env:
   _target_: envs.babilong_env.BabilongEnv
   max_steps: ${envs.max_steps}
   state_embed_length: ${max_state_length}
   action_embed_length: ${max_action_length}
-  positions_processor:
-    _target_: envs.text_env.RelativePositionProcessor
-    step_size: 10
+  positions_processor: ${envs.positions_processor_dict.${envs.positions_processor}}
   reward_model:
     _target_: envs.babilong_env.PositionalGTReward
   # Dataset Configuration
