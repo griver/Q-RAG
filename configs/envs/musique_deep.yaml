@@ -1,0 +1,61 @@
+# Global parameters for Musique dataset
+max_steps: 4
+max_chunks_count: 100
+index_type: "random"  # "absolute", "relative"
+dataset_path: "/trinity/home/a.anokhin/rmt_other_datasets/data/dataloaders/data_sources/musique"
+#tokenizer_name: "intfloat/multilingual-e5-large"
+tokenizer_name: "Qwen/Qwen3-Embedding-0.6B"
+#tokenizer_name: "Qwen/Qwen3-Embedding-4B"
+#tokenizer_name: "BAAI/bge-m3"
+dataset_length: -1
+min_context_len: 0
+max_context_len: 10000000  # 1e7
+dataset_type: "any"
+anno_type: "any"
+seed: 42
+task: "MuSique_QWEN_lr_5e6_norm_110"
+
+# Core Environment Configuration
+env:
+  _target_: rl.qa_env.QARetrievalEnv
+  max_steps: ${envs.max_steps}
+  #max_chunks_count: ${envs.max_chunks_count}
+  index_type: ${envs.index_type}
+  
+  dataset:
+    _target_: rl.qa_env.SimpleEnvAdapter
+    dataset:
+      _target_: envs.musique.RetrievalMusique
+      path: ${envs.dataset_path}
+      tokenizer: 
+        _target_: transformers.AutoTokenizer.from_pretrained
+        pretrained_model_name_or_path: ${envs.tokenizer_name}
+      length: ${envs.dataset_length}
+      min_context_len: ${envs.min_context_len}
+      max_context_len: ${envs.max_context_len}
+      type: ${envs.dataset_type}
+      anno_type: ${envs.anno_type}
+      split: "train"  # Training split
+      seed: ${envs.seed}
+
+test_env:
+  _target_: rl.qa_env.QARetrievalEnv
+  max_steps: ${envs.env.max_steps}
+  #max_chunks_count: ${envs.max_chunks_count}
+  index_type: ${envs.index_type}
+  
+  dataset:
+    _target_: rl.qa_env.SimpleEnvAdapter
+    dataset:
+      _target_: envs.musique.RetrievalMusique
+      path: ${envs.dataset_path}
+      tokenizer: 
+        _target_: transformers.AutoTokenizer.from_pretrained
+        pretrained_model_name_or_path: ${envs.tokenizer_name}
+      length: ${envs.dataset_length}
+      min_context_len: ${envs.min_context_len}
+      max_context_len: ${envs.max_context_len}
+      type: ${envs.dataset_type}
+      anno_type: ${envs.anno_type}
+      split: "eval"  # Evaluation split
+      seed: ${envs.seed}

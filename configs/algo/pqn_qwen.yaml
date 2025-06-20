@@ -1,0 +1,77 @@
+# Model Configuration
+model:
+  #bert_name: "Qwen/Qwen3-Embedding-4B"
+  bert_name: "Qwen/Qwen3-Embedding-0.6B"
+  revision: "main"
+  use_fast_tokenizer: true
+  predictor:
+    num_layers: 28
+    input_dim: 1024
+    hidden_dim: 512
+    output_dim: 1
+    max_seq_len: 5000
+
+# PQN Configuration
+pqn:
+  _target_: rl.pqn.PQN
+  
+  state_embed: &bert_predictor
+    _target_: rl.embed_predictor.BertPredictor
+    bert:
+      _target_: transformers.AutoModel.from_pretrained
+      pretrained_model_name_or_path: ${algo.model.bert_name}
+      revision: ${algo.model.revision}
+    num_hidden_layers: ${algo.model.predictor.num_layers}
+    tokenizer:
+      _target_: transformers.AutoTokenizer.from_pretrained
+      pretrained_model_name_or_path: ${algo.model.bert_name}
+      revision: ${algo.model.revision}
+      use_fast: ${algo.model.use_fast_tokenizer}
+    model_dim: ${algo.model.predictor.input_dim}
+    output_size: ${algo.model.predictor.hidden_dim}
+    n_output: ${algo.model.predictor.output_dim}
+
+  action_embed: &pos_embed
+    _target_: rl.embed_predictor.EmbedderWithPosEncoding
+    bert:
+      _target_: transformers.AutoModel.from_pretrained
+      pretrained_model_name_or_path: ${algo.model.bert_name}
+      revision: ${algo.model.revision}
+    num_hidden_layers: ${algo.model.predictor.num_layers}
+    tokenizer:
+      _target_: transformers.AutoTokenizer.from_pretrained
+      pretrained_model_name_or_path: ${algo.model.bert_name}
+      revision: ${algo.model.revision}
+      use_fast: ${algo.model.use_fast_tokenizer}
+    model_dim: ${algo.model.predictor.input_dim}
+    output_size: ${algo.model.predictor.hidden_dim}
+    n_output: ${algo.model.predictor.output_dim}
+    max_seq_len: ${algo.model.predictor.max_seq_len}
+    #max_seq_len_rope: ${algo.model.predictor.max_seq_len}
+  
+  state_embed_target: *bert_predictor
+  action_embed_target: *pos_embed
+
+  hyperparams:
+    gamma: 0.99
+    alpha: 0.005
+    Lambda: 0.6
+    tau: 0.02
+    max_grad_norm: 2.
+    accumulate_grads: ${accumulate_grads}
+
+  optimizer:
+    _target_: torch.optim.AdamW
+    lr: 5e-6            
+    betas: [0.9, 0.98]  
+    eps: 1e-06          
+    weight_decay: 0.001  
+    
+  scheduler:
+    _target_: rl.sarsa.WarmupLinearScheduler
+    total: ${steps_count}
+    ratio: 0.1
+    warmup: 0
+
+
+
