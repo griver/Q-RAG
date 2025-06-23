@@ -52,7 +52,6 @@ class BabilongEnv(TextEnv):
                  dataset,
                  max_steps: int,
                  positions_processor: PositionProcessor,
-                 state_embed_length: int,
                  action_embed_length: int,
                  reward_model = GroundTruthReward(),
                  max_embedding_batch: int = 500,
@@ -65,7 +64,6 @@ class BabilongEnv(TextEnv):
         self.dataset = dataset
         self.max_steps = max_steps
         self.max_embedding_batch = max_embedding_batch
-        self.state_embed_length = state_embed_length
         self.action_embed_length = action_embed_length
         self.reward_model = reward_model
         self.positions_processor = positions_processor
@@ -85,7 +83,6 @@ class BabilongEnv(TextEnv):
             dataset = self.dataset,
             max_steps = self.max_steps,
             positions_processor = self.positions_processor,
-            state_embed_length = self.state_embed_length,
             action_embed_length = self.action_embed_length,
             reward_model = self.reward_model,
             max_embedding_batch = self.max_embedding_batch,

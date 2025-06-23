@@ -6,6 +6,7 @@ from collections import namedtuple
 from typing import Tuple, Dict, List, Any, Union
 from transformers import PreTrainedTokenizer
 from torch.nn.utils.rnn import pad_sequence
+from functools import reduce
 
 
 TextMemory = namedtuple("TextMemory", ["item_ids", "available_ids", "available_mask", "input_ids", "attention_mask", "text"]) 
@@ -46,13 +47,46 @@ def stack_text_list(text_array: List[str], tokenizer: PreTrainedTokenizer, max_l
 
 
 def stack_memory(memory: List[TextMemory], tokenizer: PreTrainedTokenizer, max_length: int, device=None):
-
+    
     if device is None:
         device = torch.get_default_device()
-    text_array = [s.text for s in memory]
 
-    tokens = tokenizer(text_array, truncation=True, max_length=max_length)
-    
+    # text_array = [s.text for s in memory]
+    # tokens = tokenizer(text_array, truncation=True, max_length=max_length)
+    text_array = []
+    lens = []
+ 
+    for m in memory:
+        mt = m.text.split("[SEP]") 
+        text_array.extend(mt)
+        lens.append(len(mt))
+
+    tokens_split = tokenizer(text_array, truncation=True, max_length=max_length)
+    tokens = {
+       "input_ids": [],
+       "attention_mask": [] 
+    }
+
+    sep_token = tokenizer.sep_token_id
+
+    i1 = 0
+    for l in lens:
+
+        if l > 1:
+            tokens["input_ids"].append(reduce(
+                lambda s1, s2: s1[:-1] + [sep_token] + s2[1:], 
+                tokens_split["input_ids"][i1:i1+l]
+            ))
+            tokens["attention_mask"].append(reduce(
+                lambda s1, s2: s1[:-1] + [1] + s2[1:], 
+                tokens_split["attention_mask"][i1:i1+l]
+            ))
+        else:
+            tokens["input_ids"].append(tokens_split["input_ids"][i1])
+            tokens["attention_mask"].append(tokens_split["attention_mask"][i1])
+
+        i1 = i1 + l
+
     input_ids = pad_sequence_power_2(
         [torch.IntTensor(ii) for ii in tokens["input_ids"]], 
         batch_first=True, 

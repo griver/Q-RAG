@@ -27,7 +27,6 @@ class ParallelTextEnv:
         self.text_envs = text_envs
         self.state_tokenizer = state_tokenizer
         self.action_tokenizer = action_tokenizer
-        self.state_embed_length = text_envs[0].state_embed_length
         self.action_embed_length = text_envs[0].action_embed_length
 
         self.tmp_data = [[] for _ in range(len(self.text_envs))]
@@ -35,7 +34,7 @@ class ParallelTextEnv:
 
     def reset(self):
         memory = [e.reset() for e in self.text_envs]
-        return memory, stack_memory(memory, self.state_tokenizer, max_length=self.state_embed_length)
+        return memory, stack_memory(memory, self.state_tokenizer, max_length=self.action_embed_length)
     
     def rollout(self, n, s_seq, agent, random):
 
@@ -44,7 +43,7 @@ class ParallelTextEnv:
         episodes = []
         rewards = []
 
-        s_par = stack_memory(s_seq, self.state_tokenizer, max_length=self.state_embed_length)
+        s_par = stack_memory(s_seq, self.state_tokenizer, max_length=self.action_embed_length)
         new_state_seq = []
 
         size = 0
@@ -77,12 +76,13 @@ class ParallelTextEnv:
                     self.tmp_data[i] = []
         
             s_seq = new_state_seq
-            s_par = stack_memory(s_seq, self.state_tokenizer, max_length=self.state_embed_length)
+            s_par = stack_memory(s_seq, self.state_tokenizer, max_length=self.action_embed_length)
 
         s_seq, a_seq, r_seq, s_next_seq, not_dones_seq, q_seq = [], [], [], [], [], [] 
         r_sum = 0.0
 
         all_episodes = reduce(lambda e1, e2: e1 + e2, episodes)
+        # offset = 0 if len(all_episodes) <= n else np.random.randint(0, len(all_episodes) - n)
 
         for tr in all_episodes:
             s_seq.append(tr.state)
@@ -97,8 +97,8 @@ class ParallelTextEnv:
                 rewards.append(r_sum)
                 r_sum = 0.0
 
-        s_stack = stack_memory(s_seq, self.state_tokenizer, max_length=self.state_embed_length)
-        next_s_stack = stack_memory(s_next_seq, self.state_tokenizer, max_length=self.state_embed_length)
+        s_stack = stack_memory(s_seq, self.state_tokenizer, max_length=self.action_embed_length)
+        next_s_stack = stack_memory(s_next_seq, self.state_tokenizer, max_length=self.action_embed_length)
         a_stack = stack_actions(a_seq, self.action_tokenizer, max_length=self.action_embed_length)
 
         return new_state_seq, rewards, TrainBatch(

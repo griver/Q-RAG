@@ -52,7 +52,8 @@ class RelativePositionProcessor(PositionProcessor):
         
         for end in sorted_indices:
             if end > start:
-                result[start:end] = np.sqrt(np.linspace(0, self.max_value ** 2, end - start)) + current_value
+                # result[start:end] = np.sqrt(np.linspace(0, self.max_value ** 2, end - start)) + current_value
+                result[start:end] = np.linspace(0, self.max_value, end - start) + current_value
                 start = end
             current_value += self.step_size
         

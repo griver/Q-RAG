@@ -41,7 +41,7 @@ class PQN(object):
         if self.accumulate_grads < 1:
             raise ValueError("cfg.accumulate_gradients must be a positive integer")
         self._update_step = 0  # number of updates from the start of the training
-        self.state_embed_length = config.pqn.hyperparams.state_embed_length
+        self.action_embed_length = config.pqn.hyperparams.action_embed_length
 
         state_embed: nn.Module = instantiate(config.pqn.state_embed)
         action_embed: nn.Module = instantiate(config.pqn.action_embed)
@@ -110,11 +110,13 @@ class PQN(object):
     @torch.no_grad()
     def select_action(self, state: TextMemory, a_embeds: Tensor, a_embeds_target: Tensor, evaluate=False, random=False):
 
-        state = stack_memory([state], self.critic.action_embed.tokenizer, max_length=self.state_embed_length)
+        state = stack_memory([state], self.critic.action_embed.tokenizer, max_length=self.action_embed_length)
         a_embeds = pad_sequence_power_2([a_embeds], padding_value=0.0, batch_first=True)
         a_embeds_target = pad_sequence_power_2([a_embeds_target], padding_value=0.0, batch_first=True)
                 
-        return self.select_action_batch(state, a_embeds, a_embeds_target, evaluate, random)
+        action, q_values, q_values_target =  self.select_action_batch(state, a_embeds, a_embeds_target, evaluate, random)
+
+        return action.item(), q_values, q_values_target
         
     
     @torch.no_grad()
@@ -169,14 +171,8 @@ class PQN(object):
             text=None
         )
         
-        # self.critic_optim.zero_grad()
-        torch.compiler.cudagraph_mark_step_begin()
         qf_loss = self.train_step(self.critic, state_batch, action_batch, targets) #computes backward inside
-        # qf_loss = qf_loss / self.accumulate_grads
-        # qf_loss.backward()
-        # self.critic_optim.step()
-        # self.scheduler.step()
-
+        
         self._update_step += 1
         if self._update_step % self.accumulate_grads == 0:
             torch.nn.utils.clip_grad_norm_(self.critic.parameters(), self.max_grad_norm)

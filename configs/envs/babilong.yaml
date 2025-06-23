@@ -1,5 +1,5 @@
 max_steps: 6
-num_sentences: 50
+num_sentences: 100
 task: "qa2_two-supporting-facts"
 noise_train_path: "data/pg19-with-sentences/train"
 noise_test_path: "data/pg19-with-sentences/test"
@@ -16,14 +16,15 @@ positions_processor_dict:
     max_chunks_count: 1000
   relative:
     _target_: envs.text_env.RelativePositionProcessor
-    step_size: 10
+    step_size: 20
 
 # Core Environment Configuration
 env:
   _target_: envs.babilong_env.BabilongEnv
   max_steps: ${envs.max_steps}
-  state_embed_length: ${max_state_length}
   action_embed_length: ${max_action_length}
+  separator: " [SEP] "        
+  sort_by_index: True
   positions_processor: ${envs.positions_processor_dict.${envs.positions_processor}}
   reward_model:
     _target_: envs.babilong_env.PositionalGTReward
@@ -46,8 +47,9 @@ env:
 test_env:
   _target_: envs.babilong_env.BabilongEnv
   max_steps: ${envs.env.max_steps}
-  state_embed_length: ${max_state_length}
   action_embed_length: ${max_action_length}
+  separator: ${envs.env.separator}       
+  sort_by_index: ${envs.env.sort_by_index}
   positions_processor: ${envs.env.positions_processor}
   reward_model:
     _target_: envs.babilong_env.PositionalGTReward

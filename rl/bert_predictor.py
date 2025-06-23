@@ -1,3 +1,4 @@
+from abc import ABC, abstractmethod
 from transformers import RobertaTokenizer, RobertaModel, AutoModel, AutoTokenizer, PreTrainedTokenizer, PreTrainedTokenizerFast
 import numpy as np
 from torch import einsum, nn, Tensor
@@ -13,6 +14,7 @@ class BertPredictor(nn.Module):
     def __init__(self, bert: RobertaModel, num_hidden_layers, tokenizer, model_dim, output_size, n_output) -> None:
         super().__init__()
         
+        self.model_dim = model_dim
         self.head = nn.Linear(model_dim, output_size)
         self.n_output = n_output
         self.tokenizer = tokenizer
@@ -67,9 +69,6 @@ class BertPredictor(nn.Module):
     
     def forward(self, input_ids, attention_mask, *args, **kw):
         
-        # input_ids, attention_mask, token_type_ids = self._inject_class_token(input_ids, attention_mask)
-
-        assert input_ids.shape[1] <= 512
         assert attention_mask.shape[1] == input_ids.shape[1]
  
         out = self.model.forward(
@@ -83,7 +82,6 @@ class BertPredictor(nn.Module):
             prediction  = (out * mask).sum(1) / mask.sum(1)
 
         return prediction / 10
-
 
 
 class PositionalRotaryEmbedding(rotary_embedding_torch.RotaryEmbedding):
@@ -138,58 +136,63 @@ class PositionalRotaryEmbedding(rotary_embedding_torch.RotaryEmbedding):
             freqs = rearrange(freqs, 'n d -> n 1 d')
 
         return apply_rotary_emb(freqs, t, scale = scale, seq_dim = seq_dim)
+    
 
+class EmbedderBase(nn.Module, ABC):
 
-class EmbedderWithPosEncoding(BertPredictor):
-    def __init__(self,
-                 bert: RobertaModel,
-                 num_hidden_layers,
-                 tokenizer,
-                 model_dim,
-                 output_size,
-                 n_output,
-                 encoding_type='rope',
-                 max_seq_len=1000,
-                 interpolate_factor=1
-                 ) -> None:
-        super().__init__(bert, num_hidden_layers, tokenizer, model_dim, output_size, n_output)
-        assert encoding_type in ['rope', 'none'], "encoding_type must be 'rope' or 'none'"
-        self.encoding_type = encoding_type
-        if encoding_type != 'none': #
-            self.rotary_emb = PositionalRotaryEmbedding(
-                dim=model_dim // 2,
-                cache_max_seq_len=max_seq_len,
-                interpolate_factor=interpolate_factor
-            )
+    def __init__(self, model: BertPredictor):
+        super().__init__()
+        self.model = model
+        self.tokenizer = model.tokenizer
+
+    @abstractmethod
+    def update_pos(self, embeds: Dict[str, Tensor], positions: Tensor, *args, **kw): pass
+
+    @abstractmethod
+    def forward(self, input_ids, attention_mask, positions, *args, **kw): pass
+
+    
+class EmbedderNone(EmbedderBase):
 
     def update_pos(self, embeds, positions, *args, **kw):
         return embeds
 
     def forward(self, input_ids, attention_mask, positions, *args, **kw):
-        embeds = super().forward(input_ids, attention_mask, *args, **kw)
-        if self.encoding_type == 'none':
-            return embeds
+        embeds = self.model.forward(input_ids, attention_mask, *args, **kw)
+        return {"rope": embeds}
 
-        # positions = kw.get('positions', None)
+
+class EmbedderWithPosEncoding(EmbedderBase):
+    def __init__(self,
+                 model: BertPredictor,
+                 max_seq_len=1000,
+                 interpolate_factor=1
+                 ) -> None:
+        super().__init__(model)
+        self.rotary_emb = PositionalRotaryEmbedding(
+            dim=model.model_dim // 2,
+            cache_max_seq_len=max_seq_len,
+            interpolate_factor=interpolate_factor
+        )
+
+    def update_pos(self, embeds, positions, *args, **kw):
+        return embeds
+
+    def forward(self, input_ids, attention_mask, positions, *args, **kw):
+        embeds = self.model.forward(input_ids, attention_mask, *args, **kw)
         seq_dim = 0 if len(embeds.shape) == 2 else 1
-
-        # if positions is None:
-        #     positions = torch.arange(embeds.shape[seq_dim], device = embeds.device, dtype = embeds.dtype)
-        
         embeds = self.rotary_emb.rotate_queries_or_keys(embeds, positions, seq_dim=seq_dim, offset=0)
        
         return {"rope": embeds}
     
 
-class EmbedderWithRelativeEncoding(BertPredictor):
-    def __init__(self, bert: RobertaModel, num_hidden_layers, tokenizer, model_dim, output_size, n_output, encoding_type='rope', max_seq_len=1000) -> None:
-        super().__init__(bert, num_hidden_layers, tokenizer, model_dim, output_size, n_output)
-        assert encoding_type in ['rope', 'none'], "encoding_type must be 'rope' or 'none'"
-        self.encoding_type = encoding_type
-        # if encoding_type != 'none':
-        self.rotary_emb = PositionalRotaryEmbedding(dim=model_dim // 2, cache_max_seq_len=max_seq_len)
-        # self.add_emb = nn.Embedding(2000, model_dim)
-
+class EmbedderWithRelativeEncoding(EmbedderBase):
+    def __init__(self, 
+                 model: BertPredictor,
+                 max_seq_len=1000) -> None:
+        super().__init__(model)
+        self.rotary_emb = PositionalRotaryEmbedding(dim=model.model_dim // 2, cache_max_seq_len=max_seq_len)
+        
     def update_pos(self, embeds, positions, *args, **kw):
         seq_dim = 0 if len(embeds["none"].shape) == 2 else 1        
         rope_embeds = self.rotary_emb.rotate_queries_or_keys(embeds["none"], positions, seq_dim=seq_dim, offset=0) 
@@ -197,7 +200,7 @@ class EmbedderWithRelativeEncoding(BertPredictor):
         return {"rope": rope_embeds, "none": embeds["none"]}
 
     def forward(self, input_ids, attention_mask, positions, *args, **kw):
-        embeds = super().forward(input_ids, attention_mask, *args, **kw)
+        embeds = self.model.forward(input_ids, attention_mask, *args, **kw)
         seq_dim = 0 if len(embeds.shape) == 2 else 1        
         rope_embeds = self.rotary_emb.rotate_queries_or_keys(embeds, positions, seq_dim=seq_dim, offset=0)
         return {"rope": rope_embeds, "none": embeds}

@@ -155,6 +155,7 @@ def main(argv: List[str] | None = None) -> None:
     set_all_seeds(cfg.seed)
 
     # Respect the device stored in the training config; fall back to CPU if absent
+    print("device", getattr(cfg, "device", "cpu"))
     torch.set_default_device(getattr(cfg, "device", "cpu"))
     torch.set_float32_matmul_precision("high")
 

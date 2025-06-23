@@ -33,7 +33,7 @@ def evaluate(env_test, agent):
         a_embeds_target_t = env_test.update_embeds(a_embeds_target_t, agent.action_embed_target)
         
         action_t, _, _ = agent.select_action(s_t, a_embeds_t["rope"], a_embeds_target_t["rope"], random=False, evaluate=True)
-        s_t, _, reward_t, done_t = env_test.step(action_t.item())
+        s_t, _, reward_t, done_t = env_test.step(action_t)
         r_sum_t += reward_t
     
     return r_sum_t
@@ -88,7 +88,6 @@ print(f"[INFO] Training config saved to {config_save_path}")
 ckpt_last_path = os.path.join(cfg.logger.log_dir, "model_last.pt")
 ckpt_best_path = os.path.join(cfg.logger.log_dir, "model_best.pt")
 best_eval_reward = -float("inf")
-
 
 torch.set_default_device(cfg.device)
 torch.set_float32_matmul_precision('high')
