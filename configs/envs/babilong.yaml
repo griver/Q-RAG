@@ -1,70 +1,82 @@
 max_steps: 6
 num_sentences: 100
 task: "qa2_two-supporting-facts"
-noise_train_path: "data/pg19-with-sentences/train"
-noise_test_path: "data/pg19-with-sentences/test"
-facts_train_path: data/tasks_1-20_v1-2/en-10k/${envs.task}_train.txt
-facts_test_path: data/tasks_1-20_v1-2/en-10k/${envs.task}_test.txt
+noise_train_path: "data/babilong/pg19-with-sentences/train"
+noise_test_path: "data/babilong/pg19-with-sentences/test"
+facts_train_path: data/babilong/tasks_1-20_v1-2/en-10k/${envs.task}_train.txt
+facts_test_path: data/babilong/tasks_1-20_v1-2/en-10k/${envs.task}_test.txt
 
 positions_processor: relative
 
 positions_processor_dict:
+  none:
+    #this choice allows to ignore positional embeddings
+    #but inside the environment we still need to enumerate chunks
+    _target_: envs.text_env.AbsolutePositionProcessor
   absolute:
     _target_: envs.text_env.AbsolutePositionProcessor
   random:
     _target_: envs.text_env.RandomPositionProcessor
-    max_chunks_count: 1000
+    max_chunks_count: 2000
   relative:
     _target_: envs.text_env.RelativePositionProcessor
     step_size: 20
 
+
+train_dataset: &train_dataset
+  _target_: envs.RetrievalBabiLong
+  num_sentences: ${envs.num_sentences}
+
+  task_dataset:
+    _target_: envs.dataloaders.babilong.TaskDataset
+    dataset_path: ${envs.facts_train_path}
+
+  noise_sentence_sampler:
+    _target_: envs.dataloaders.babilong.RetrSentenceSampler
+    dataset:
+      _target_: datasets.load_from_disk
+      dataset_path: ${envs.noise_train_path}
+
+test_dataset: &test_dataset
+  _target_: envs.RetrievalBabiLong
+  num_sentences: ${envs.num_sentences}
+
+  task_dataset:
+    _target_: envs.dataloaders.babilong.TaskDataset
+    dataset_path: ${envs.facts_test_path}
+
+  noise_sentence_sampler:
+    _target_: envs.dataloaders.babilong.RetrSentenceSampler
+    dataset:
+      _target_: datasets.load_from_disk
+      dataset_path: ${envs.noise_test_path}
+
 # Core Environment Configuration
 env:
-  _target_: envs.babilong_env.BabilongEnv
+  _target_: envs.qa_env.QAEnv
   max_steps: ${envs.max_steps}
   action_embed_length: ${max_action_length}
   separator: " [SEP] "        
   sort_by_index: True
   positions_processor: ${envs.positions_processor_dict.${envs.positions_processor}}
   reward_model:
-    _target_: envs.babilong_env.PositionalGTReward
+    _target_: envs.qa_env.PositionalGTReward
   # Dataset Configuration
   dataset:
-    _target_: envs.babilong.retrieval_babilong.RetrievalBabiLong
-    num_sentences: ${envs.num_sentences}
-    
-    task_dataset:
-      _target_: envs.babilong.babilong_utils.TaskDataset
-      dataset_path: ${envs.facts_train_path}
-
-    noise_sentence_sampler:
-      _target_: envs.babilong.retrieval_babilong.RetrSentenceSampler
-      dataset:
-        _target_: datasets.load_from_disk
-        dataset_path: ${envs.noise_train_path}
+    _target_: envs.QADatasetAdapter
+    dataset: *train_dataset
 
 
 test_env:
-  _target_: envs.babilong_env.BabilongEnv
+  _target_: envs.qa_env.QAEnv
   max_steps: ${envs.env.max_steps}
   action_embed_length: ${max_action_length}
   separator: ${envs.env.separator}       
   sort_by_index: ${envs.env.sort_by_index}
   positions_processor: ${envs.env.positions_processor}
   reward_model:
-    _target_: envs.babilong_env.PositionalGTReward
+    _target_: envs.qa_env.PositionalGTReward
   dataset:
-    _target_: envs.babilong.retrieval_babilong.RetrievalBabiLong
-    num_sentences: ${envs.env.dataset.num_sentences}
-    
-    task_dataset:
-      _target_: envs.babilong.babilong_utils.TaskDataset
-      dataset_path: ${envs.facts_test_path}
-
-    noise_sentence_sampler:
-      _target_: envs.babilong.retrieval_babilong.RetrSentenceSampler
-      dataset:
-        _target_: datasets.load_from_disk
-        dataset_path: ${envs.noise_test_path}
-
+    _target_: envs.QADatasetAdapter
+    dataset: *test_dataset
 

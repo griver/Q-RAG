@@ -2,19 +2,19 @@ import sys
 import os
 
 
-repo_dir = os.path.dirname(os.path.abspath("./"))
+repo_dir = os.path.dirname(os.path.abspath("../"))
 if repo_dir not in sys.path:
     print(f'add repository dir: {repo_dir}')
     sys.path.append(repo_dir)
 
 
-from envs.babilong.babilong_fix import QA2FixWrapper
-from envs.babilong.retrieval_babilong import RetrievalBabiLong, RetrSentenceSampler
-from envs.babilong.babilong_utils import TaskDataset
+from envs.dataloaders.babilong.babilong_fix import QA2FixWrapper
+from envs.dataloaders.babilong.retrieval_babilong import RetrievalBabiLong, RetrSentenceSampler
+from envs.dataloaders.babilong.babilong_utils import TaskDataset
 from torch.utils.tensorboard import SummaryWriter
 import datasets
 import numpy as np
-from envs.babilong_env import BabilongEnv
+from envs.qa_env import QAEnv
 from rl.agents.sacd import SAC, SACArgs
 # from rl.sarsa import SARSA, SARSAArgs
 from transformers import AutoModel, AutoTokenizer
@@ -50,9 +50,9 @@ dataset_test = RetrievalBabiLong(
     num_sentences=num_sentences
 )
 
-bert_name = "facebook/contriever"
-tokenizer = AutoTokenizer.from_pretrained(bert_name, use_fast=True, revision="main")
-bert_model = AutoModel.from_pretrained(bert_name, revision="main")
+model_name = "facebook/contriever"
+tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True, revision="main")
+bert_model = AutoModel.from_pretrained(model_name, revision="main")
 
 
 action_embed = BertPredictor(bert_model, 12, tokenizer, 768, 256, 1).cuda()
@@ -71,14 +71,14 @@ agent = SAC(
     SACArgs(gamma=0.99, tau=0.01, lr=5e-5, alpha=0.005, automatic_entropy_tuning=True, max_steps=(100_000 // 4) * max_steps)
 )
 
-env = BabilongEnv( 
+env = QAEnv(
     embedder=agent.action_embed_target, 
     embed_tokenizer=tokenizer, 
     dataset=dataset,
     max_steps=max_steps
 )
 
-env_test = BabilongEnv( 
+env_test = QAEnv(
     embedder=agent.action_embed_target, 
     embed_tokenizer=tokenizer, 
     dataset=dataset_test,

@@ -1,7 +1,7 @@
 import sys
 import os
 
-repo_dir = os.path.dirname(os.path.abspath("./"))
+repo_dir = os.path.dirname(os.path.abspath("../"))
 if repo_dir not in sys.path:
     print(f'add repository dir: {repo_dir}')
     sys.path.append(repo_dir)
@@ -16,7 +16,7 @@ from omegaconf import OmegaConf
 from hydra.utils import instantiate
 from hydra import initialize, compose
 import random
-from envs.babilong.retrieval_babilong import RetrievalBabiLong
+from envs.dataloaders.babilong.retrieval_babilong import RetrievalBabiLong
 
 print(RetrievalBabiLong)
 
@@ -35,7 +35,7 @@ def evaluate(env_test, agent):
 
 
 def load_config(name, overrides=None):
-    with initialize(version_base="1.3", config_path="./configs"):
+    with initialize(version_base="1.3", config_path="../configs"):
         cfg = compose(
             config_name=name,
             overrides=overrides if overrides else []

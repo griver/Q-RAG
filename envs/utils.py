@@ -1,4 +1,5 @@
 from abc import abstractmethod
+
 import numpy as np
 from torch import nn, Tensor
 import torch
@@ -17,11 +18,22 @@ Transition = namedtuple("Transition", [
 
 
 @torch.no_grad()
-def pad_sequence_power_2(seq_list: List[Tensor], padding_value, batch_first=True):
+def custom_pad_sequence(seq_list: List[Tensor], padding_value, batch_first=True, padding_side='right', pad_to_power_2=True):
     max_len = max(map(len, seq_list))
     max_len_2 = 2 ** int(np.ceil(np.log2(max_len)))
-    pad_1 = pad_sequence(seq_list, batch_first=batch_first, padding_value=padding_value)
-    pad_2 = torch.nn.functional.pad(pad_1, [0, 0] * (len(pad_1.shape)-2) + [0, max_len_2 - max_len] + [0, 0], value=padding_value)
+    pad_1 = pad_sequence(seq_list, batch_first=batch_first, padding_side=padding_side, padding_value=padding_value)
+
+    if not pad_to_power_2:
+        return pad_1
+
+    if padding_side == 'right':
+        seq_padding = [0, max_len_2 - max_len]
+    elif padding_side == 'left':
+        seq_padding = [max_len_2 - max_len, 0]
+    else:
+        raise ValueError('padding_side must be either "left" or "right"')
+
+    pad_2 = torch.nn.functional.pad(pad_1, [0, 0] * (len(pad_1.shape)-2) + seq_padding + [0, 0], value=padding_value)
     assert pad_2.shape[1] == max_len_2
     return pad_2
 
@@ -33,15 +45,19 @@ def stack_text_list(text_array: List[str], tokenizer: PreTrainedTokenizer, max_l
 
     tokens = tokenizer(text_array, truncation=True, max_length=max_length)
     
-    input_ids = pad_sequence_power_2(
+    input_ids = custom_pad_sequence(
         [torch.IntTensor(ii) for ii in tokens["input_ids"]], 
         batch_first=True, 
-        padding_value=int(tokenizer.pad_token_id))
+        padding_value=int(tokenizer.pad_token_id),
+        padding_side=tokenizer.padding_side
+    )
     
-    attention_mask = pad_sequence_power_2(
+    attention_mask = custom_pad_sequence(
         [torch.IntTensor(am) for am in tokens["attention_mask"]], 
         batch_first=True, 
-        padding_value=0)
+        padding_value=0,
+        padding_side=tokenizer.padding_side
+    )
     
     return {"input_ids": input_ids.to(device), "attention_mask": attention_mask.to(device)}
 
@@ -68,6 +84,8 @@ def stack_memory(memory: List[TextMemory], tokenizer: PreTrainedTokenizer, max_l
     }
 
     sep_token = tokenizer.sep_token_id
+    if sep_token is None:
+        sep_token = tokenizer.eos_token_id
 
     i1 = 0
     for l in lens:
@@ -87,21 +105,28 @@ def stack_memory(memory: List[TextMemory], tokenizer: PreTrainedTokenizer, max_l
 
         i1 = i1 + l
 
-    input_ids = pad_sequence_power_2(
-        [torch.IntTensor(ii) for ii in tokens["input_ids"]], 
-        batch_first=True, 
-        padding_value=int(tokenizer.pad_token_id))
-    
+    input_ids = custom_pad_sequence(
+        [torch.IntTensor(ii) for ii in tokens["input_ids"]],
+        batch_first=True,
+        padding_value=int(tokenizer.pad_token_id),
+        padding_side=tokenizer.padding_side
+    )
+
     assert input_ids.shape[0] == len(memory)
     
-    attention_mask = pad_sequence_power_2(
+    attention_mask = custom_pad_sequence(
         [torch.IntTensor(am) for am in tokens["attention_mask"]], 
         batch_first=True, 
-        padding_value=0)
+        padding_value=0,
+        padding_side=tokenizer.padding_side
+    )
     
-    available_mask = pad_sequence_power_2(
+    available_mask = custom_pad_sequence(
         [torch.from_numpy(si.available_mask) for si in memory], 
-        batch_first=True, padding_value=False)
+        batch_first=True, padding_value=False,
+        # this padding is different as available_mask has nothing to do with actual texts (it marks chunks available for retrieval)
+        padding_side='right', pad_to_power_2=False
+    )
     
     s_memory = TextMemory(
         item_ids=[si.item_ids for si in memory],
@@ -124,15 +149,19 @@ def stack_actions(actions: List[TextMemoryItem], tokenizer, max_length: int, dev
 
     tokens = tokenizer(text_array, truncation=True, max_length=max_length)
     
-    input_ids = pad_sequence_power_2(
+    input_ids = custom_pad_sequence(
         [torch.IntTensor(ii) for ii in tokens["input_ids"]], 
         batch_first=True, 
-        padding_value=int(tokenizer.pad_token_id))
+        padding_value=int(tokenizer.pad_token_id),
+        padding_side=tokenizer.padding_side
+    )
     
-    attention_mask = pad_sequence_power_2(
+    attention_mask = custom_pad_sequence(
         [torch.IntTensor(am) for am in tokens["attention_mask"]], 
         batch_first=True, 
-        padding_value=0)
+        padding_value=0,
+        padding_side=tokenizer.padding_side
+    )
     
     a_block = TextMemoryItem(
         index=[si.index for si in actions],

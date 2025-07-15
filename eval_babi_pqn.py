@@ -18,7 +18,7 @@ if repo_dir not in sys.path:
     sys.path.append(repo_dir)
 
 from rl.agents.pqn import PQN  # noqa: E402
-from envs.babilong_env import BabilongEnv  # noqa: E402
+from envs.qa_env import QAEnv  # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -92,7 +92,7 @@ def calc_fact_f1_em(predicted_support_idxs, gt_support_idxs):
 
 
 @torch.no_grad()
-def evaluate_episode(env: BabilongEnv, agent: PQN) -> float:
+def evaluate_episode(env: QAEnv, agent: PQN) -> float:
     """Run a single episode and return the cumulative reward."""
     state = env.reset()
     text_len = env.get_sample_len(agent.action_tokenizer)
@@ -172,7 +172,7 @@ def main(argv: List[str] | None = None) -> None:
     agent.load(ckpt_path, strict=True)
     agent.eval()
 
-    env_test: BabilongEnv = instantiate(cfg.envs.test_env)
+    env_test: QAEnv = instantiate(cfg.envs.test_env)
 
     # -----------------------------------------------------------------------
     # Evaluate

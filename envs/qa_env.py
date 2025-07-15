@@ -46,8 +46,10 @@ class PositionalGTReward(GroundTruthReward):
         return 1.0 if gt_sf.issubset(pred_sf) else 0.0
 
 
-class BabilongEnv(TextEnv):
-
+class QAEnv(TextEnv):
+    """
+    Question Answering Environment is an RL interface to interact with QA Datasets
+    """
     def __init__(self,
                  dataset,
                  max_steps: int,
@@ -71,15 +73,14 @@ class BabilongEnv(TextEnv):
         self.sort_by_index = sort_by_index
 
 
-        self.references = None
+        #self.references = None we don't need this one anymore use PositionalGTReward
         self.question = None
         self.sentences = None
-        self.facts_idx = None
        
         self.num_steps = 0
 
     def copy(self):
-        return BabilongEnv(
+        return QAEnv(
             dataset = self.dataset,
             max_steps = self.max_steps,
             positions_processor = self.positions_processor,
@@ -91,13 +92,13 @@ class BabilongEnv(TextEnv):
         )
 
     def _init_from_sample(self, sample):
-        self.references = list(sample['references'])
-        self.question = sample['question']  # append as this is a single str
+        self.sample_id = sample["id"]
+        self.question = sample['question']
         self.answer = sample['answer']
         self.sentences = np.asarray(sample['chunks'])
-        self.facts_idx = list(sample['facts_idx'])
-        self.references_idx = sample.get('references_idx')
-        
+        self.references_idx = sample.get('sf_idx')
+        #self.references = list(sample['references'])
+
     def reset(self, new_sample=None) -> TextMemory:
         if new_sample is not None:
             self._init_from_sample(new_sample)
@@ -119,16 +120,20 @@ class BabilongEnv(TextEnv):
     def step(self, action: int):
         self.num_steps += 1
 
-        done = self.num_steps >= self.max_steps
+        truncated = self.num_steps >= self.max_steps
         
-        text_memory, text_item, text_done = super()._step(action)
+        text_memory, text_item, done = super()._step(action)
         self.text_state.append(self.sentences[action])
 
         r = self._reward(action)
+        #if self.num_steps >= self.max_steps:
         if r > 1e-5:
             done = True
-    
-        return text_memory, text_item, r, done or text_done
+
+        return text_memory, text_item, r, done or truncated
+
+    # s_t = q + {R#1} + f^{0}_1 + {R#2} + n^{17}_2 + {R#0} + f^{35}_0
+    # s_t = Emb_s(q + f^{0}_1 + f^{35}_0) * Emb_a(n^{17}_2)
 
     @property
     def device(self):

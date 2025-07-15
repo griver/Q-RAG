@@ -5,7 +5,7 @@ from rl.agents.dqn import DQN, DQNArgs
 from envs.words_counter_env import WordsCounterEnv
 
 
-repo_dir = os.path.dirname(os.path.abspath("./"))
+repo_dir = os.path.dirname(os.path.abspath("../"))
 if repo_dir not in sys.path:
     print(f'add repository dir: {repo_dir}')
     sys.path.append(repo_dir)
@@ -32,9 +32,9 @@ dataset = load_dataset("AIRI-NLP/quality_counter_new_1024")
 
 writer = SummaryWriter(comment="DQN_" + "AIRI-NLP/quality_counter_1024")
 
-bert_name = "facebook/contriever"
-tokenizer = AutoTokenizer.from_pretrained(bert_name, use_fast=True, revision="main")
-bert_model = AutoModel.from_pretrained(bert_name, revision="main").to(torch.float32).to(torch.get_default_device())
+model_name = "facebook/contriever"
+tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True, revision="main")
+bert_model = AutoModel.from_pretrained(model_name, revision="main").to(torch.float32).to(torch.get_default_device())
 
 print("model dev", next(bert_model.parameters()).device)
 

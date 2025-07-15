@@ -5,7 +5,6 @@ from torch.utils.data import Dataset
 import datasets
 from os.path import join as join_path
 from typing import List, Any, Tuple
-from .babilong_fix import QA2FixWrapper
 
 
 class RetrSentenceSampler:
@@ -86,18 +85,6 @@ class RetrievalBabiLong(Dataset):
                split='train'):
 
         fact_dataset = TaskDataset(path, task, split)  # max_n_facts=10)
-        if 'qa2' in task:
-            # in Babi support facts may repeat several times.
-            # the correct support fact among equal copies depends on the
-            # relative order of facts.
-            # QA2FixWrapper finds correct support facts for task QA2 and adds "references_idx" key to the sample
-            fact_dataset = QA2FixWrapper(fact_dataset)
-            #
-        else:
-            # It is too tedious to determine correct support fact for each task in BabiLong
-            # the good heuristic is to select the last fact among the equal copies
-            pass
-
         noise_path = join_path(path, noise_data_path, split)
         noise_dataset = datasets.load_from_disk(noise_path)
         noise_sampler = RetrSentenceSampler(noise_dataset, shuffle=True, random_seed=seed)
@@ -161,3 +148,33 @@ class RetrievalBabiLong(Dataset):
             task_ds = task_ds.task_dataset
 
         return task_ds.get_partition_name()
+
+
+if __name__ == "__main__":
+    from transformers import AutoTokenizer
+
+    tokenizer = AutoTokenizer.from_pretrained("Undi95/Meta-Llama-3-8B-Instruct-hf")
+    dataset = RetrievalBabiLong.create(
+        'data/babilong/', 'qa2', 100,
+        noise_data_path='pg19-with-sentences/', seed=42)
+    print("PARTITION:", dataset.get_partition_info())
+
+    for i in np.random.randint(10000, size=5):
+        sample = dataset[i]
+        print(list(sample.keys()))
+        print('Chunks:')
+        for i, chunk in enumerate(sample['chunks']):
+            chunk_without_newlines = chunk.replace('\n', ' ')
+            print(f'#{i}: {chunk_without_newlines}', end='')
+            print(" [FACT]" if i in sample['facts_idx'] else " [NOISE]", end='')
+            if 'references_idx' in sample:
+                print( " [SUPPORT]" if i in sample['references_idx'] else "")
+        print('REFERENCES')
+        print('\n'.join(sample['references']))
+        print('REFERENCES from idx:')
+        print('\n'.join(sample['chunks'][idx] for idx in sample['references_idx']))
+        # print(f"context len: {sample.context_length}")
+        # print(f'Q: {sample.question}')
+        # print(f'A: {sample.answer}')
+        #print(f"Contex:\n {sample.context[:1024]}...")
+        print('====================')

@@ -1,0 +1,62 @@
+max_steps: 2
+task: "hotpotqa"
+data_path: data/hotpotqa/
+sort_by_index: False
+
+positions_processor: none
+
+positions_processor_dict:
+  none:
+    #this choice allows to ignore positional embeddings
+    #but inside the environment we still need to enumerate chunks
+    _target_: envs.text_env.AbsolutePositionProcessor
+  absolute:
+    _target_: envs.text_env.AbsolutePositionProcessor
+  random:
+    _target_: envs.text_env.RandomPositionProcessor
+    max_chunks_count: 2000
+  relative:
+    _target_: envs.text_env.RelativePositionProcessor
+    step_size: 20
+
+train_dataset: &train_dataset
+  _target_: envs.RetrievalHotPotQA
+  path: ${envs.data_path}
+  split: 'train'
+  seed: ${seed}
+
+test_dataset: &test_dataset
+  _target_: envs.RetrievalHotPotQA
+  path: ${envs.data_path}
+  split: 'eval'
+  seed: ${seed}
+
+# Core Environment Configuration
+env:
+  _target_: envs.qa_env.QAEnv
+  max_steps: ${envs.max_steps}
+  action_embed_length: ${max_action_length}
+  separator: " [SEP] "
+  sort_by_index: ${envs.sort_by_index}
+  positions_processor: ${envs.positions_processor_dict.${envs.positions_processor}}
+  reward_model:
+    _target_: envs.qa_env.PositionalGTReward
+  # Dataset Configuration
+  dataset:
+    _target_: envs.QADatasetAdapter
+    dataset: *train_dataset
+
+
+test_env:
+  _target_: envs.qa_env.QAEnv
+  max_steps: ${envs.env.max_steps}
+  action_embed_length: ${max_action_length}
+  separator: ${envs.env.separator}
+  sort_by_index: ${envs.sort_by_index}
+  positions_processor: ${envs.env.positions_processor}
+  reward_model:
+    _target_: envs.qa_env.PositionalGTReward
+  dataset:
+    _target_: envs.QADatasetAdapter
+    dataset: *test_dataset
+

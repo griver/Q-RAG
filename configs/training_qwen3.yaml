@@ -1,0 +1,16 @@
+defaults:
+  - envs: babilong 
+  - algo: pqn_qwen3
+  - logger: logging
+  - _self_
+
+seed: 42
+device: 'cuda:0'
+learning_start: 200
+steps_count: 50_000
+batch_size: 32
+accumulate_grads: 2
+eval_interval: 100
+eval_episodes: 300
+envs_parallel: 3
+max_action_length: 64

@@ -11,7 +11,7 @@ import torch
 import sys
 from rl.agents.pqn import PQN
 import numpy as np
-from envs.babilong_env import BabilongEnv
+from envs.qa_env import QAEnv
 from envs.parallel_env import ParallelTextEnv
 from tqdm import tqdm
 import torch
@@ -41,13 +41,13 @@ def evaluate(env_test, agent):
 
 def load_config(name, overrides=None):
     with initialize(version_base="1.3", config_path="./configs"):
+
         cfg = compose(
             config_name=name,
-            overrides=overrides if overrides else []
+            overrides=sys.argv[1:] #overrides if overrides else []
         )
-        cli_cfg = OmegaConf.from_cli()
-        cfg = OmegaConf.merge(cfg, cli_cfg)
-        #OmegaConf.resolve(cfg)
+        #cli_cfg = OmegaConf.from_cli()
+        #cfg = OmegaConf.merge(cfg, cli_cfg)
         cfg = prepare_config(cfg)
         return cfg
 
@@ -74,15 +74,19 @@ def set_all_seeds(seed):
   torch.backends.cudnn.deterministic = True
 
 
-cfg: DictConfig = load_config(name="training")
-agent_config: DictConfig = cfg.algo
-env_config: DictConfig = cfg.envs
+#cfg: DictConfig = load_config(name="training_qwen3.yaml")
+cfg: DictConfig = load_config(name="training.yaml")
 
 writer: SummaryWriter = instantiate(cfg.logger.tensorboard)
 os.makedirs(cfg.logger.log_dir, exist_ok=True)
 config_save_path = os.path.join(cfg.logger.log_dir, "config.yaml")
 OmegaConf.save(config=cfg, f=config_save_path, resolve=False)
 print(f"[INFO] Training config saved to {config_save_path}")
+
+OmegaConf.resolve(cfg)
+agent_config: DictConfig = cfg.algo
+env_config: DictConfig = cfg.envs
+print("Embedder model:", agent_config.model.model_name)
 
 # path to checkpoints and metric to determine the best model
 ckpt_last_path = os.path.join(cfg.logger.log_dir, "model_last.pt")
@@ -98,8 +102,25 @@ set_all_seeds(cfg.seed)
 
 agent = PQN(agent_config)
 
-env: BabilongEnv = instantiate(env_config.env)
-env_test: BabilongEnv = instantiate(env_config.test_env)
+# if bf16:
+#     for m in [agent.critic, agent.policy, agent.random_policy,
+#               agent.v_net_target, agent.action_embed_target]:
+#         m.to(dtype=torch.bfloat16)
+#
+# if args.fp16:
+#     # import apex
+#     # apex.amp.register_half_function(torch, 'einsum')
+#     from torch.cuda.amp import autocast, GradScaler
+#
+#     scaler = GradScaler()
+#
+# device_type = torch.device(cfg.device).type
+# amp_dtype = torch.bfloat16 if bf16 else torch.float16
+# amp_enabled = bf16 or mixed_precision
+# autocast = torch.cuda.amp.autocast if device_type == 'cuda' else torch.autocast
+
+env: QAEnv = instantiate(env_config.env)
+env_test: QAEnv = instantiate(env_config.test_env)
 parallel_env = ParallelTextEnv(
     [env] + [env.copy() for _ in range(cfg.envs_parallel - 1)], 
     state_tokenizer=agent.state_tokenizer,

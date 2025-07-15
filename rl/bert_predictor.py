@@ -1,4 +1,6 @@
 from abc import ABC, abstractmethod
+
+import fsspec.utils
 from transformers import RobertaTokenizer, RobertaModel, AutoModel, AutoTokenizer, PreTrainedTokenizer, PreTrainedTokenizerFast
 import numpy as np
 from torch import einsum, nn, Tensor
@@ -8,6 +10,7 @@ from typing import Dict
 import rotary_embedding_torch
 from einops import rearrange, repeat
 from rotary_embedding_torch import apply_rotary_emb
+import torch.nn.functional as F
 
 class BertPredictor(nn.Module):
 
@@ -41,32 +44,6 @@ class BertPredictor(nn.Module):
             self.register_buffer('output_token_ids', torch.arange(vocab_size, extended_vocab_size))
             self.model.resize_token_embeddings(extended_vocab_size)
 
-    def _inject_class_token(self, input_ids: Tensor, attention_mask: Tensor):
-        input_ids = input_ids.clone()
-        input_ids[(input_ids == self.sep_token_id) | (input_ids == self.cls_token_id) | (attention_mask < 1e-5)] = self.pad_token_id
-        
-        prefix_1 = self.cls_token[None, :].repeat(input_ids.shape[0], 1)
-
-        if self.n_output > 1:
-            prefix_2 = self.output_token_ids[None, :].repeat(input_ids.shape[0], 1)
-            prefix_3 = self.sep_token[None, :].repeat(input_ids.shape[0], 1)
-            input_ids = torch.cat([prefix_1, prefix_2, prefix_3, input_ids], dim=1)
-        else:
-            input_ids = torch.cat([prefix_1, input_ids], dim=1)
-
-        attention_mask = self.get_attention_mask(input_ids)
-        token_type_ids = self.get_token_type_ids(input_ids)
-
-        return input_ids, attention_mask, token_type_ids
-
-    def get_attention_mask(self, tensor):
-        mask = torch.ones_like(tensor)
-        mask[tensor == self.pad_token_id] = 0
-        return mask
-
-    def get_token_type_ids(self, tensor):
-        return torch.zeros_like(tensor)
-    
     def forward(self, input_ids, attention_mask, *args, **kw):
         
         assert attention_mask.shape[1] == input_ids.shape[1]
@@ -81,7 +58,81 @@ class BertPredictor(nn.Module):
             mask = attention_mask.reshape(out.shape[0], out.shape[1], 1)
             prediction  = (out * mask).sum(1) / mask.sum(1)
 
+        #print(f'Embedder Output [shape={prediction.shape}, dtype={prediction.dtype}, device={prediction.device}]')
         return prediction / 10
+
+@torch.no_grad()
+def get_embedder_dim(tokenizer, embedder):
+    embedder_dim = embedder.config.hidden_size
+    # out = embedder(tokenizer.encode('hello!', return_tensors='pt').to(embedder.device))
+    # embedder_dim = out.last_hidden_state.shape[-1]
+    return embedder_dim
+
+
+class SimpleEmbedder(nn.Module):
+
+    def __init__(self, model_name, normalize_embeds=True, tokenizer_kwargs=None, model_kwargs=None) -> None:
+        super().__init__()
+        self.normalize_embeds = normalize_embeds
+        tokenizer_kwargs = {} if tokenizer_kwargs is None else tokenizer_kwargs
+        model_kwargs = {} if model_kwargs is None else model_kwargs
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name, **tokenizer_kwargs)
+        self.model = AutoModel.from_pretrained(model_name, **model_kwargs)
+        self.model_dim = get_embedder_dim(self.tokenizer, self.model)
+        self.model.train()
+        print('SimpleEmbedder.dtype:', self.model.dtype)
+        print('SimpleEmbedder.model_dim:', self.model_dim)
+
+    def forward(self, input_ids, attention_mask, *args, **kw):
+        assert attention_mask.shape[1] == input_ids.shape[1]
+
+        out = self.model.forward(input_ids, attention_mask)
+        #this two lines adapted from QWEN 3
+        embeds = self.last_token_pool(out.last_hidden_state, attention_mask)
+        if self.normalize_embeds:
+            embeds = F.normalize(embeds, p=2, dim=1)
+        #print(f'Embedder Output [shape={embeds.shape}, dtype={embeds.dtype}, device={embeds.device}]')
+        return embeds
+
+    @staticmethod
+    def last_token_pool(last_hidden_states: Tensor, attention_mask: Tensor) -> Tensor:
+        left_padding = (attention_mask[:, -1].sum() == attention_mask.shape[0])
+        if left_padding:
+            return last_hidden_states[:, -1]
+        else:
+            sequence_lengths = attention_mask.sum(dim=1) - 1
+            batch_size = last_hidden_states.shape[0]
+            return last_hidden_states[torch.arange(batch_size, device=last_hidden_states.device), sequence_lengths]
+
+
+# class SimpleEmbedderOld(nn.Module):
+#     """Load a HuggingFace model and produce a single embedding per sequence."""
+#
+#     def __init__(self,
+#                  model_name: str,
+#                  revision: str = "main",
+#                  pooling: str = "cls",
+#                  use_fast_tokenizer: bool = True):
+#         super().__init__()
+#         self.tokenizer = AutoTokenizer.from_pretrained(model_name,
+#                                                        revision=revision,
+#                                                        use_fast=use_fast_tokenizer)
+#         self.model = AutoModel.from_pretrained(model_name, revision=revision)
+#         self.pooling = pooling
+#
+#     def forward(self, input_ids, attention_mask, *args, **kwargs):
+#         assert attention_mask.shape[1] == input_ids.shape[1]
+#         outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
+#
+#         last_hidden = outputs.last_hidden_state
+#         if self.pooling == "cls":
+#             emb = last_hidden[:, 0]
+#         elif self.pooling == "mean":
+#             mask = attention_mask.unsqueeze(-1)
+#             emb = (last_hidden * mask).sum(1) / mask.sum(1).clamp(min=1)
+#         else:
+#             raise ValueError(f"Unknown pooling type: {self.pooling}")
+#         return self.out_proj(emb)
 
 
 class PositionalRotaryEmbedding(rotary_embedding_torch.RotaryEmbedding):
@@ -162,7 +213,7 @@ class EmbedderNone(EmbedderBase):
         return {"rope": embeds}
 
 
-class EmbedderWithPosEncoding(EmbedderBase):
+class EmbedderWithAbsoluteEncoding(EmbedderBase):
     def __init__(self,
                  model: BertPredictor,
                  max_seq_len=1000,

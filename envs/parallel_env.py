@@ -10,7 +10,7 @@ from torch.nn.utils.rnn import pad_sequence
 from sortedcontainers import SortedList
 from functools import reduce
 from envs.text_env import TextEnv
-from envs.utils import pad_sequence_power_2, stack_actions, stack_memory
+from envs.utils import custom_pad_sequence, stack_actions, stack_memory
 
 
 TrainBatch = namedtuple("TrainBatch", [
@@ -55,9 +55,11 @@ class ParallelTextEnv:
 
             a_embeds_pos = [emb["rope"] for emb in a_embeds]
             a_embeds_target_pos = [emb["rope"] for emb in a_embeds_target]
-             
-            embeds_pt = pad_sequence_power_2(a_embeds_pos, padding_value=0.0, batch_first=True)
-            embeds_target_pt = pad_sequence_power_2(a_embeds_target_pos, padding_value=0.0, batch_first=True)
+            # TODO: custom_pad_sequence was changed to accept two new arguments: padding_side, and pad_to_power_2.
+            #  For example Qwen3 Embedder uses left padding for texts.
+            #  Please consider how this change will affect two lines below.
+            embeds_pt = custom_pad_sequence(a_embeds_pos, padding_value=0.0, batch_first=True, pad_to_power_2=False)
+            embeds_target_pt = custom_pad_sequence(a_embeds_target_pos, padding_value=0.0, batch_first=True, pad_to_power_2=False)
         
             action, _, q_values  = agent.select_action_batch(s_par, embeds_pt, embeds_target_pt, random=random)
             action = action.cpu().numpy().reshape(-1)

@@ -116,9 +116,10 @@ class TextQNetPolicy(nn.Module):
         # print("logits", logits.shape)
         logits[s.available_mask == False] = logits.min() - 1
 
-        top_ids = torch.topk(logits, self.top_k_actions, dim=1).indices
+        #print('\033[96m'+f'logits: {logits.shape}  topk: {self.top_k_actions}'+"\033[0m")
+        top_k_actions = min(logits.size(1), self.top_k_actions)
+        top_ids = torch.topk(logits, top_k_actions, dim=1).indices
         top_mask = torch.zeros_like(logits > 0).scatter_(1, top_ids, True)
-
         # print("top_mask", top_mask.shape)
 
         if return_arg_max:
@@ -181,10 +182,11 @@ class TextVNet(nn.Module):
         logits_1 = (s_embed[:, :, :D] * a_embeds[:, :, :D]).sum(-1) 
         logits_2 = (s_embed[:, :, D:] * a_embeds[:, :, D:]).sum(-1) 
 
-        top_ids_1 = torch.topk(logits_1, self.top_k_actions, dim=1).indices
+        top_k_actions = min(logits_1.size(1), self.top_k_actions)
+        top_ids_1 = torch.topk(logits_1, top_k_actions, dim=1).indices
         top_mask_1 = torch.zeros_like(logits_1 > 0).scatter_(1, top_ids_1, True)
 
-        top_ids_2 = torch.topk(logits_2, self.top_k_actions, dim=1).indices
+        top_ids_2 = torch.topk(logits_2, top_k_actions, dim=1).indices
         top_mask_2 = torch.zeros_like(logits_2 > 0).scatter_(1, top_ids_2, True)
 
         v1 = alpha * logsumexp(logits_1 / alpha, attention_mask=s.available_mask & top_mask_1, dim=-1)

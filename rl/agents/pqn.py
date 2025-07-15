@@ -7,8 +7,8 @@ from torch import optim
 import torch.nn.functional as F
 from torch.optim import Adam, AdamW
 from collections import namedtuple
-from rl.bert_predictor import EmbedderWithPosEncoding
-from envs.utils import pad_sequence_power_2, stack_memory, stack_text_list
+from rl.bert_predictor import EmbedderWithAbsoluteEncoding
+from envs.utils import custom_pad_sequence, stack_memory, stack_text_list
 from ..q_module import TextQNet, TextQNetPolicy, TextRandomPolicy, ActionEmbedTarget, TextMaxQNet, TextVNet
 from envs.utils import TextMemory, TextMemoryItem
 import copy
@@ -111,8 +111,8 @@ class PQN(object):
     def select_action(self, state: TextMemory, a_embeds: Tensor, a_embeds_target: Tensor, evaluate=False, random=False):
 
         state = stack_memory([state], self.critic.action_embed.tokenizer, max_length=self.action_embed_length)
-        a_embeds = pad_sequence_power_2([a_embeds], padding_value=0.0, batch_first=True)
-        a_embeds_target = pad_sequence_power_2([a_embeds_target], padding_value=0.0, batch_first=True)
+        a_embeds = custom_pad_sequence([a_embeds], padding_value=0.0, batch_first=True, pad_to_power_2=False)
+        a_embeds_target = custom_pad_sequence([a_embeds_target], padding_value=0.0, batch_first=True, pad_to_power_2=False)
                 
         action, q_values, q_values_target =  self.select_action_batch(state, a_embeds, a_embeds_target, evaluate, random)
 
@@ -287,8 +287,8 @@ class PQNActor:
         a_embeds_pos = [emb["rope"] for emb in self.embeds]
         a_embeds_target_pos = [emb["rope"] for emb in self.embeds_target]
              
-        embeds_pt = pad_sequence_power_2(a_embeds_pos, padding_value=0.0, batch_first=True)
-        embeds_target_pt = pad_sequence_power_2(a_embeds_target_pos, padding_value=0.0, batch_first=True)
+        embeds_pt = custom_pad_sequence(a_embeds_pos, padding_value=0.0, batch_first=True, pad_to_power_2=False)
+        embeds_target_pt = custom_pad_sequence(a_embeds_target_pos, padding_value=0.0, batch_first=True, pad_to_power_2=False)
         
         action, _, q_values  = self.agent.select_action_batch(s_par, embeds_pt, embeds_target_pt, random=is_random)
         

@@ -1,8 +1,8 @@
 from rl.replay_buffer import TextReplayBuffer
-from envs.babilong.retrieval_babilong import RetrievalBabiLong, RetrSentenceSampler
+from envs.dataloaders.babilong.retrieval_babilong import RetrievalBabiLong, RetrSentenceSampler
 from rl.agents.agent import RetrievalAgent
-from envs.babilong.retrieval_env import RetrievalEnv, RetrievalPolicy, TopKExhaustiveSearch, RewardForFacts
-from envs.babilong.babilong_utils import TaskDataset
+from envs.dataloaders.babilong.retrieval_env import RetrievalEnv, RetrievalPolicy, TopKExhaustiveSearch, RewardForFacts
+from envs.dataloaders.babilong.babilong_utils import TaskDataset
 import datasets
 import torch
 import sys
@@ -193,7 +193,7 @@ if __name__ == "__main__":
     num_sentences = 50 #measure size of sample in sentences if use_retrieval_dataset == True
     task = "qa2_two-supporting-facts"
     noise_train_path = "data/pg19-train-with-sentences"
-    noise_path_test = "data/pg19-test-with-sentences"
+    noise_path_test = "../data/babilong/pg19-test-with-sentences"
     facts_train_path = f"data/tasks_1-20_v1-2/en-10k/{task}_train.txt"
     facts_test_path = f"data/tasks_1-20_v1-2/en-10k/{task}_test.txt"
 

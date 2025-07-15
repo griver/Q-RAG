@@ -1,0 +1,79 @@
+# Model Configuration
+model:
+  model_name: "Qwen/Qwen3-Embedding-0.6B"
+  model_kwargs:
+    #attn_implementation: "flash_attention_2"
+    #torch_dtype: float16
+  tokenizer_kwargs:
+    padding_side: left
+    #use_fast_tokenizer: true #fast tokenizer is used by default
+  pos_encoding: #parameters for pos encoding
+    max_seq_len: 5000
+    interpolate_factor: 1 # used only in action embedder for chunks positional index interpolation
+                          # step between idx[i] and idx[i+1] is equal to 1./interpolate_factor
+
+state_model:
+  _target_: rl.bert_predictor.SimpleEmbedder
+  model_name: ${algo.model.model_name}
+  model_kwargs: ${algo.model.model_kwargs}
+  tokenizer_kwargs: ${algo.model.tokenizer_kwargs}
+
+action_model:
+  _target_: rl.bert_predictor.SimpleEmbedder
+  model_name: ${algo.model.model_name}
+  model_kwargs: ${algo.model.model_kwargs}
+  tokenizer_kwargs: ${algo.model.tokenizer_kwargs}
+
+action_embed_dict:
+  absolute:
+    _target_: rl.bert_predictor.EmbedderWithAbsoluteEncoding
+    model: ${algo.action_model}
+    max_seq_len: ${algo.model.pos_encoding.max_seq_len}
+
+  random:
+    _target_: rl.bert_predictor.EmbedderWithAbsoluteEncoding
+    model: ${algo.action_model}
+    max_seq_len: ${algo.model.pos_encoding.max_seq_len}
+    interpolate_factor: ${algo.model.pos_encoding.interpolate_factor}
+
+  relative:
+    _target_: rl.bert_predictor.EmbedderWithRelativeEncoding
+    model: ${algo.action_model}
+    max_seq_len: 1000
+
+  none:
+    _target_: rl.bert_predictor.EmbedderNone
+    model: ${algo.action_model}
+
+
+# PQN Configuration
+pqn:
+  _target_: rl.pqn.PQN
+
+  state_embed: ${algo.state_model}
+  action_embed: ${algo.action_embed_dict.${envs.positions_processor}}
+
+  state_embed_target: ${algo.state_model}
+  action_embed_target: ${algo.action_embed_dict.${envs.positions_processor}}
+
+  hyperparams:
+    gamma: 0.99
+    alpha: 0.005
+    Lambda: 0.6
+    tau: 0.02
+    max_grad_norm: 2.
+    accumulate_grads: ${accumulate_grads}
+    action_embed_length: ${max_action_length}
+
+  optimizer:
+    _target_: torch.optim.AdamW
+    lr: 5e-5
+    betas: [0.9, 0.98]
+    eps: 1e-06
+    weight_decay: 0.01
+
+  scheduler:
+    _target_: rl.optim.WarmupLinearScheduler
+    total: ${steps_count}
+    ratio: 0.0
+    warmup: 1000

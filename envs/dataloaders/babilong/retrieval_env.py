@@ -3,11 +3,11 @@ import torch
 import sys
 import datasets
 from transformers import AutoTokenizer
-from envs.babilong.babilong_utils import TaskDataset, SentenceSampler, NoiseInjectionDataset
+from envs.dataloaders.babilong.babilong_utils import TaskDataset, SentenceSampler, NoiseInjectionDataset
 from langchain_community.vectorstores import FAISS
 from langchain_community.vectorstores.utils import DistanceStrategy
 from rl.langchain_utils import ContrieverEmbeddingsAdapter
-from envs.babilong.retrieval_babilong import RetrSentenceSampler, RetrievalBabiLong
+from envs.dataloaders.babilong.retrieval_babilong import RetrSentenceSampler, RetrievalBabiLong
 
 
 def shuffle(noise, facts):
