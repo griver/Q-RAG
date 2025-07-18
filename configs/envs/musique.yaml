@@ -1,6 +1,6 @@
 max_steps: 4
 task: "musique"
-data_path: data/musique/
+data_path: ../datasets/musique/
 sort_by_index: False
 
 positions_processor: none

@@ -1,6 +1,6 @@
 max_steps: 2
 task: "hotpotqa"
-data_path: data/hotpotqa/
+data_path: "../datasets/hotpotqa/"
 sort_by_index: False
 
 positions_processor: none

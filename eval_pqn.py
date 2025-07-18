@@ -9,6 +9,7 @@ import numpy as np
 import torch
 from omegaconf import OmegaConf
 from hydra.utils import instantiate
+from hydra import compose, initialize
 from torchvision.ops.misc import interpolate
 from tqdm import tqdm
 
@@ -133,9 +134,14 @@ def evaluate_episode(env: QAEnv, agent: PQN) -> float:
 
 
 def load_eval_config(name):
-    cli_cfg = OmegaConf.from_cli()
-    eval_cfg = OmegaConf.load(name)
-    eval_cfg = OmegaConf.merge(eval_cfg, cli_cfg)
+    with initialize(version_base="1.3", config_path="./configs"):
+        eval_cfg = compose(
+            config_name=name,
+            overrides=sys.argv[1:]
+        )
+        # cli_cfg = OmegaConf.from_cli()
+        # eval_cfg = OmegaConf.load(name)
+        # eval_cfg = OmegaConf.merge(eval_cfg, cli_cfg)
 
     train_cfg_path = os.path.join(eval_cfg.pretrained_path, 'config.yaml')
     if not os.path.exists(train_cfg_path):
@@ -147,7 +153,7 @@ def load_eval_config(name):
     return cfg
 
 def main(argv: List[str] | None = None) -> None:
-    cfg = load_eval_config("configs/testing.yaml")
+    cfg = load_eval_config("testing.yaml")
     # Set global MAX_TOKEN_LENGTH constants before tokenisers are built
     # MAX_TOKEN_LENGTH["state"] = cfg.max_state_length
     # MAX_TOKEN_LENGTH["action"] = cfg.max_action_length

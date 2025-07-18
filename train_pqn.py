@@ -83,7 +83,6 @@ config_save_path = os.path.join(cfg.logger.log_dir, "config.yaml")
 OmegaConf.save(config=cfg, f=config_save_path, resolve=False)
 print(f"[INFO] Training config saved to {config_save_path}")
 
-OmegaConf.resolve(cfg)
 agent_config: DictConfig = cfg.algo
 env_config: DictConfig = cfg.envs
 print("Embedder model:", agent_config.model.model_name)
@@ -157,7 +156,11 @@ for it in progress_bar:
         writer.add_scalar("train r_sum", np.mean(train_rewards), step)
         writer.add_scalar("qf_loss", qf_loss, step)
 
-        r_eval = [evaluate(env_test, agent) for _ in range(cfg.eval_episodes)]
+        r_eval = []
+        for j in range(cfg.eval_episodes):
+            r_eval.append(evaluate(env_test, agent))
+            print(f"\reval prog: {len(r_eval)}/{cfg.eval_episodes}", end="")
+
         writer.add_scalar("eval r_sum", np.mean(r_eval), step)
 
         progress_bar.set_postfix({
