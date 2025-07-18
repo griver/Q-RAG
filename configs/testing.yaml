@@ -5,6 +5,7 @@ use_last: False
 #you can also rewrite any parameter from training config in this config:
 seed: 42
 device: 'cuda:0'
+random_sampling: false #choice: if true then samples are choosen randomly
 envs:
   num_sentences: 50
   #max_steps: 6

@@ -93,9 +93,13 @@ def calc_fact_f1_em(predicted_support_idxs, gt_support_idxs):
 
 
 @torch.no_grad()
-def evaluate_episode(env: QAEnv, agent: PQN) -> float:
+def evaluate_episode(env: QAEnv, agent: PQN, sample_id=None) -> float:
     """Run a single episode and return the cumulative reward."""
-    state = env.reset()
+    if sample_id is None:
+        state = env.reset()
+    else:
+        state = env.reset(env.dataset[sample_id])
+
     text_len = env.get_sample_len(agent.action_tokenizer)
     done = False
 
@@ -180,6 +184,10 @@ def main(argv: List[str] | None = None) -> None:
 
     env_test: QAEnv = instantiate(cfg.envs.test_env)
 
+    max_samples = len(env_test.dataset)
+    if not (0 < cfg.num_samples <= max_samples):
+        print(f'set num samples from {cfg.num_samples} to {max_samples}')
+        cfg.num_samples = max_samples
     # -----------------------------------------------------------------------
     # Evaluate
     # -----------------------------------------------------------------------
@@ -187,8 +195,10 @@ def main(argv: List[str] | None = None) -> None:
     text_lens = []
     all_em = []
     all_f1 = []
-    for _ in tqdm(range(cfg.num_samples), desc="Evaluating", ncols=80):
-        res = evaluate_episode(env_test, agent)
+
+    for i in tqdm(range(cfg.num_samples), desc="Evaluating", ncols=80):
+        sample_id = None if cfg.random_sampling else i
+        res = evaluate_episode(env_test, agent, sample_id=sample_id)
         returns.append(res['return'])
         text_lens.append(res['text_len'])
         all_f1.append(res['f1'])
