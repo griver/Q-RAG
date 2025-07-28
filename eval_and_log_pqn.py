@@ -133,7 +133,7 @@ def evaluate_episode(env: QAEnv, agent: PQN, sample=None) -> dict:
         'text_len': text_len,
         'f1': f1,
         'em': em,
-        'pred_idx': sorted(pred_sf),
+        'pred_idx': pred_sf,
     }
 
 
@@ -237,7 +237,7 @@ def main(argv: List[str] | None = None) -> None:
             "id": sample["id"],
             "question": sample["question"],
             "answer": sample["answer"],
-            "sf_idx": sample["sf_idx"],
+            "sf_idx": [int(idx) for idx in sample["sf_idx"]],
             "pred_idx": res["pred_idx"],
             "sf_texts": [sample["chunks"][idx] for idx in sample["sf_idx"]],
             "pred_text": [sample["chunks"][idx] for idx in res["pred_idx"]],
@@ -246,6 +246,10 @@ def main(argv: List[str] | None = None) -> None:
             "f1": res["f1"],
             "em": res["em"],
         }
+        #{for k,v in entry.items() if type(v) == int }
+        # for k, v in entry.items():
+        #     print(k, type(v), type(v[0]) if type(v) == list else "")
+
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
         f.flush()
 
