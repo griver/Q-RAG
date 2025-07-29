@@ -1,6 +1,7 @@
 import os
 import argparse
 import json
+import re
 from typing import List
 from tqdm import tqdm
 from vllm import LLM, SamplingParams
@@ -12,6 +13,23 @@ from prompts_and_metrics.babilong import (
     compute_exact_match,
     gen_f1_metric,
 )
+
+def save_final_scores(results_path: str, ns_key: str, f1: float, em: float) -> None:
+    """Save F1 and EM scores under the provided key into results file."""
+    if os.path.exists(results_path):
+        with open(results_path, "r") as f:
+            try:
+                results = json.load(f)
+            except json.JSONDecodeError:
+                results = {}
+    else:
+        results = {}
+
+    results[ns_key] = {"f1": f1, "em": em}
+
+    with open(results_path, "w") as f:
+        json.dump(results, f, ensure_ascii=False, indent=2)
+
 
 
 def prepare_messages(question: str, facts: List[str], prompt_cfg: dict, user_template: str):
@@ -51,8 +69,8 @@ def main():
     }
     compute_f1 = gen_f1_metric(args.babi_task)
 
-    llm = LLM(model=args.llm_name, gpu_memory_utilization=0.2)
-    sampling_params = SamplingParams(max_tokens=args.max_tokens, temperature=0.3)
+    llm = LLM(model=args.llm_name, gpu_memory_utilization=0.3)
+    sampling_params = SamplingParams(max_tokens=args.max_tokens, temperature=0.2)
 
     out_path = os.path.join(
         os.path.dirname(args.retriever_logfile),
@@ -75,7 +93,11 @@ def main():
             facts_sorted = [f for idx, f in sorted(zip(facts_idx, facts))]
 
             messages = prepare_messages(question, facts_sorted, prompt_cfg, prompt_cfg["template"])
-            prompt = llm.get_tokenizer().apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
+            prompt = llm.get_tokenizer().apply_chat_template(
+                messages,
+                add_generation_prompt=True,
+                tokenize=False,
+            )
             outputs = llm.generate([prompt], sampling_params)
             prediction = outputs[0].outputs[0].text.strip()
 
@@ -93,9 +115,19 @@ def main():
             f_out.write(json.dumps(item, ensure_ascii=False) + "\n")
             f_out.flush()
 
-    print(
-        f"Saved results to {out_path}. F1: {sum(all_f1)/len(all_f1):.3f}, EM: {sum(all_em)/len(all_em):.3f}"
+    final_f1 = sum(all_f1) / len(all_f1)
+    final_em = sum(all_em) / len(all_em)
+
+    print(f"Saved results to {out_path}. F1: {final_f1:.3f}, EM: {final_em:.3f}")
+
+    ns_match = re.search(r"ns(\d+)", os.path.basename(args.retriever_logfile))
+    ns_key = ns_match.group(1) if ns_match else "unknown"
+
+    results_path = os.path.join(
+        os.path.dirname(args.retriever_logfile),
+        f"results_{os.path.basename(args.llm_name)}",
     )
+    save_final_scores(results_path, ns_key, final_f1, final_em)
 
 
 if __name__ == "__main__":

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Usage: ./eval_long_context_babilong.sh <pretrained_path> <gpu_id> <seed>
-# Example : ./eval_long_context_babilong.sh runs/Jul26_02-56-05_PQN_qa3_three-supporting-facts/ 0 42
+# Usage: ./eval_retriever_babilong.sh <pretrained_path> <gpu_id> <seed>
+# Example : ./eval_retriever_babilong.sh runs/Jul26_02-56-05_PQN_qa3_three-supporting-facts/ 0 42
 
 set -e  # stop when first error occurs
 
