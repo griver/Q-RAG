@@ -2,7 +2,7 @@ import os
 import argparse
 import json
 from typing import List
-
+from tqdm import tqdm
 from vllm import LLM, SamplingParams
 
 from prompts_and_metrics.babilong import (
@@ -51,21 +51,22 @@ def main():
     }
     compute_f1 = gen_f1_metric(args.babi_task)
 
-    llm = LLM(model=args.llm_name)
+    llm = LLM(model=args.llm_name, gpu_memory_utilization=0.2)
     sampling_params = SamplingParams(max_tokens=args.max_tokens, temperature=0.3)
 
     out_path = os.path.join(
         os.path.dirname(args.retriever_logfile),
-        f"{args.llm_name}_{os.path.basename(args.retriever_logfile)}",
+        f"{os.path.basename(args.llm_name)}_{os.path.basename(args.retriever_logfile)}",
     )
 
     all_f1 = []
     all_em = []
 
-    with open(args.retriever_logfile, "r") as f_in, open(out_path, "w") as f_out:
-        for line in f_in:
-            if not line.strip():
-                continue
+    with open(args.retriever_logfile, "r") as f_in:
+        lines = [ln for ln in f_in if ln.strip()]
+
+    with open(out_path, "w") as f_out:
+        for line in tqdm(lines, desc="LLM eval", ncols=80):
             item = json.loads(line)
             question = item["question"]
             answer = item["answer"]
@@ -74,7 +75,7 @@ def main():
             facts_sorted = [f for idx, f in sorted(zip(facts_idx, facts))]
 
             messages = prepare_messages(question, facts_sorted, prompt_cfg, prompt_cfg["template"])
-            prompt = llm.tokenizer.apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
+            prompt = llm.get_tokenizer().apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
             outputs = llm.generate([prompt], sampling_params)
             prediction = outputs[0].outputs[0].text.strip()
 
