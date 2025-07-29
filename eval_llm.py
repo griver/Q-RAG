@@ -4,6 +4,9 @@ import json
 from typing import List
 from tqdm import tqdm
 from vllm import LLM, SamplingParams
+import os          
+
+os.environ["VLLM_CONFIGURE_LOGGING"] = "0" 
 
 from prompts_and_metrics.babilong import (
     DEFAULT_PROMPTS,
@@ -51,8 +54,8 @@ def main():
     }
     compute_f1 = gen_f1_metric(args.babi_task)
 
-    llm = LLM(model=args.llm_name, gpu_memory_utilization=0.2)
-    sampling_params = SamplingParams(max_tokens=args.max_tokens, temperature=0.3)
+    llm = LLM(model=args.llm_name, gpu_memory_utilization=0.3)
+    sampling_params = SamplingParams(max_tokens=args.max_tokens, temperature=0.)
 
     out_path = os.path.join(
         os.path.dirname(args.retriever_logfile),
@@ -61,12 +64,16 @@ def main():
 
     all_f1 = []
     all_em = []
-
+    #max_samples = 100
     with open(args.retriever_logfile, "r") as f_in:
         lines = [ln for ln in f_in if ln.strip()]
 
     with open(out_path, "w") as f_out:
-        for line in tqdm(lines, desc="LLM eval", ncols=80):
+        for i in tqdm(range(len(lines)), desc="LLM eval", ncols=80):
+            # if i >= max_samples: 
+            #     break
+                
+            line = lines[i]
             item = json.loads(line)
             question = item["question"]
             answer = item["answer"]
@@ -75,7 +82,10 @@ def main():
             facts_sorted = [f for idx, f in sorted(zip(facts_idx, facts))]
 
             messages = prepare_messages(question, facts_sorted, prompt_cfg, prompt_cfg["template"])
-            prompt = llm.get_tokenizer().apply_chat_template(messages, add_generation_prompt=True, tokenize=False)
+            prompt = llm.get_tokenizer().apply_chat_template(messages, add_generation_prompt=False, enable_thinking=False, tokenize=False)
+            #print('Messages:', messages)
+            #print('Prompt:', prompt)
+            #break
             outputs = llm.generate([prompt], sampling_params)
             prediction = outputs[0].outputs[0].text.strip()
 
@@ -89,6 +99,8 @@ def main():
                 "prediction": prediction,
                 "answer_f1": ans_f1,
                 "answer_em": ans_em,
+                'pred_idx': sorted(facts_idx),
+                'pred_text': facts_sorted,
             })
             f_out.write(json.dumps(item, ensure_ascii=False) + "\n")
             f_out.flush()
