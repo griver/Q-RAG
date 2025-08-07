@@ -62,8 +62,18 @@ def main():
     parser.add_argument("--llm_name", required=True, help="Name of LLM to load")
     parser.add_argument("--babi_task", default=None, help="Babi task name")
     parser.add_argument("--max_tokens", type=int, default=32, help="Max tokens to generate")
+    parser.add_argument('--gpu_util', type=float, default=0.3, help="Max gpu memory utilization. Default: 0.3")
+    parser.add_argument('--think', action="store_true", default=False, help='enable_thinking for Qwen3 models.')
     args = parser.parse_args()
 
+    chat_template_kwargs = dict(
+        add_generation_prompt=False, 
+        tokenize=False
+    )
+    if "Qwen3" in args.llm_name:
+        chat_template_kwargs['enable_thinking'] = args.think
+        print(f'set enable_thinking = {args.think} for {args.llm_name}')
+    
     prompt_cfg = {
         "instruction": DEFAULT_PROMPTS[args.babi_task]["instruction"],
         "examples": DEFAULT_PROMPTS[args.babi_task]["examples"],
@@ -72,8 +82,8 @@ def main():
     }
     compute_f1 = gen_f1_metric(args.babi_task)
 
-    llm = LLM(model=args.llm_name, gpu_memory_utilization=0.3)
-    sampling_params = SamplingParams(max_tokens=args.max_tokens, temperature=0.2)
+    llm = LLM(model=args.llm_name, gpu_memory_utilization=args.gpu_util)
+    sampling_params = SamplingParams(max_tokens=args.max_tokens, temperature=0.0)
 
     out_path = os.path.join(
         os.path.dirname(args.retriever_logfile),
@@ -99,7 +109,7 @@ def main():
             facts_sorted = [f for idx, f in sorted(zip(facts_idx, facts))]
 
             messages = prepare_messages(question, facts_sorted, prompt_cfg, prompt_cfg["template"])
-            prompt = llm.get_tokenizer().apply_chat_template(messages, add_generation_prompt=False, enable_thinking=False, tokenize=False)
+            prompt = llm.get_tokenizer().apply_chat_template(messages, **chat_template_kwargs)
             #print('Messages:', messages)
             #print('Prompt:', prompt)
             #break

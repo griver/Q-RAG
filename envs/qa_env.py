@@ -64,7 +64,7 @@ class QAEnv(TextEnv):
                  positions_processor: PositionProcessor,
                  action_embed_length: int,
                  reward_model = GroundTruthReward(),
-                 max_embedding_batch: int = 500,
+                 max_embedding_batch: int = 10000,
                  separator: str = " [SEP] ",             
                  sort_by_index: bool = True
         ):
