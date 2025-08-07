@@ -5,7 +5,7 @@ TASK_TEMPLATE = '{instruction}\n\n{examples}\n\n{post_prompt}'
 USER_TEMPLATE = '<context>\n{context}\n</context>\n\nQuestion: {question}'
 DEFAULT_TEMPLATE_OLD = f'{TASK_TEMPLATE}\n\n{USER_TEMPLATE}'
 
-TEMPLATE = '{instruction}\n{examples}\n{post_prompt}\nContext: {context}\n\nQuestion: {question}'
+TEMPLATE = '{instruction}\n{examples}\n{post_prompt}\nContext: {context}\n\nQuestion: {question}?'
 
 
 def get_formatted_input_old(context, question, examples, instruction, post_prompt, template=DEFAULT_TEMPLATE_OLD):
@@ -120,12 +120,17 @@ DEFAULT_PROMPTS = {
             'What is the kitchen south of?\n'
             'Answer: bedroom\n'
             '</example>\n'
+            '<example>\n' #new
+            "The hallway is east of the bathroom. The bedroom is west of the bathroom. "
+            "What is the bathroom east of?\n"
+            'Answer: bedroom\n'
+            '</example>\n'
             '<example>\n'
             'The garden is west of the bedroom. The bedroom is west of the kitchen. What is west of the bedroom?\n'
             'Answer: garden\n'
             '</example>',
         'post_prompt':
-            'Your answer should contain only one word - location. Do not write anything else after that.'
+            'Your answer should contain only one word - location.' #Do not write anything else after that.'
     },
     'qa5': {
         'instruction':

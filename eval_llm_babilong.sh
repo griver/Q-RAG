@@ -16,12 +16,13 @@ TASK=$3             # babi task
 GPU_ID=$4           # gpu for inference
 
 SEED=42             # фиксируем сид
-NS_LIST=(50 160 1200 4600 40000)   # cycle over number of sentences in context
+NS_LIST=(50 160 1200 4600 40000 400000)   # cycle over number of sentences in context
 
 for NS in "${NS_LIST[@]}"; do
   echo "▶️  Run Num sentences=${NS}, Task=${TASK}"
   CUDA_VISIBLE_DEVICES="${GPU_ID}" ~/.mlspace/envs/msr/bin/python3 eval_llm.py \
     "${LOGDIR_PATH}/eval_seed${SEED}_ns${NS}.jsonl" \
     --llm_name "${LLM}" \
-    --babi_task "${TASK}"
+    --babi_task "${TASK}" \
+    --max_token 256 --think
 done
