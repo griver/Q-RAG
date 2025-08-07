@@ -37,13 +37,21 @@ class PositionalGTReward(GroundTruthReward):
     This reward takes into account temporal information that allows to distinguish
     true support facts, from similar events.
     """
+    def __init__(self, penalize_extra_steps=False,  only_at_max_step=False):
+        super().__init__(only_at_max_step)
+        self.penalize_extra_steps = penalize_extra_steps
+
     def reward(self, env, action):
         if self.only_at_max_step and (env.num_steps < env.max_steps):
             return 0.
 
         pred_sf = set(map(int, env.memory.item_ids))
         gt_sf = set(env.references_idx)
-        return 1.0 if gt_sf.issubset(pred_sf) else 0.0
+        if self.penalize_extra_steps:
+            r = 0.5 + 0.5 * len(gt_sf) / (len(pred_sf) + 1e-5)
+        else:
+            r = 1.0
+        return r if gt_sf.issubset(pred_sf) else 0.0
 
 
 class QAEnv(TextEnv):
