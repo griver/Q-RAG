@@ -5,28 +5,14 @@ import torch.utils
 from nltk.probability import gt_demo
 from envs.text_env import PositionProcessor, TextEnv
 from transformers import PreTrainedTokenizer, PreTrainedTokenizerFast
+from rl.feedback.feedback import AFeedbackModel
 from envs.utils import TextMemory
 
 
-class GroundTruthReward:
-    def __init__(self, only_at_max_step=False):
-        super().__init__()
-        self.only_at_max_step = only_at_max_step
-
-    def reward(self, env, action):
-        if self.only_at_max_step and (env.num_steps < env.max_steps):
-            return 0.
-
-        is_retrieved = []
-        for r in env.references:
-            is_retrieved.append(r in env.text_state)
-
-        all_retrieved = all(is_retrieved)
-        return float(all_retrieved)
-
-
-class PositionalGTReward(GroundTruthReward):
+class PositionalGTReward:
     """
+    !THIS IS AN OLD VERSION OF A REWARD MODEL. USE rl.feedback.feedback.GroundTruthFeedback INSTEAD!
+
     This version takes into account position of the support facts.
     In babi tasks several events could have completely identical text descriptions,
     but only one of them can be considered a support fact/reference fact.
@@ -38,7 +24,8 @@ class PositionalGTReward(GroundTruthReward):
     true support facts, from similar events.
     """
     def __init__(self, penalize_extra_steps=False,  only_at_max_step=False):
-        super().__init__(only_at_max_step)
+        super().__init__()
+        self.only_at_max_step = only_at_max_step
         self.penalize_extra_steps = penalize_extra_steps
 
     def reward(self, env, action):
@@ -63,7 +50,8 @@ class QAEnv(TextEnv):
                  max_steps: int,
                  positions_processor: PositionProcessor,
                  action_embed_length: int,
-                 reward_model = GroundTruthReward(),
+                 feedback_model: AFeedbackModel,
+                 #reward_model = GroundTruthReward(),
                  max_embedding_batch: int = 10000,
                  separator: str = " [SEP] ",             
                  sort_by_index: bool = True
@@ -75,7 +63,8 @@ class QAEnv(TextEnv):
         self.max_steps = max_steps
         self.max_embedding_batch = max_embedding_batch
         self.action_embed_length = action_embed_length
-        self.reward_model = reward_model
+        self.feedback_model = feedback_model
+        #self.reward_model = reward_model
         self.positions_processor = positions_processor
         self.separator = separator
         self.sort_by_index = sort_by_index
@@ -93,7 +82,8 @@ class QAEnv(TextEnv):
             max_steps = self.max_steps,
             positions_processor = self.positions_processor,
             action_embed_length = self.action_embed_length,
-            reward_model = self.reward_model,
+            feedback_model=self.feedback_model,
+            #reward_model = self.reward_model,
             max_embedding_batch = self.max_embedding_batch,
             separator = self.separator,             
             sort_by_index = self.sort_by_index
@@ -105,7 +95,23 @@ class QAEnv(TextEnv):
         self.answer = sample['answer']
         self.sentences = np.asarray(sample['chunks'])
         self.references_idx = sample.get('sf_idx')
-        #self.references = list(sample['references'])
+        self.references = [self.sentences[i] for i in self.references_idx]
+
+    def _make_obs_and_info(self):
+        """Right now this function is used only to prepare input for a feedback model"""
+        pred_idx = [int(i) for i in self.memory.item_ids]
+        pred_chunks = [self.sentences[i] for i in pred_idx]
+        obs = {
+            'question': self.question,
+            'sample_id': self.sample_id,
+            'pred_idx': pred_idx,
+            'pred_chunks': pred_chunks,
+        }
+        info = {
+            'sf_idx': self.references_idx,
+            'sf_chunks': self.references,
+        }
+        return obs, info
 
     def reset(self, new_sample=None) -> TextMemory:
         if new_sample is not None:
@@ -119,11 +125,14 @@ class QAEnv(TextEnv):
 
         self.num_steps = 0
 
-        self.refs_found = []
-        self.text_state = []
-        
-        return super()._reset(self.question, self.sentences)
-   
+        #self.refs_found = []
+        #self.text_state = []
+
+        obs = super()._reset(self.question, self.sentences)
+        fb_obs, fb_info = self._make_obs_and_info()
+        self.feedback_model.reset(fb_obs, fb_info)
+
+        return obs
 
     def step(self, action: int):
         self.num_steps += 1
@@ -131,14 +140,14 @@ class QAEnv(TextEnv):
         truncated = self.num_steps >= self.max_steps
         
         text_memory, text_item, done = super()._step(action)
-        self.text_state.append(self.sentences[action])
 
-        r = self._reward(action)
-        #if self.num_steps >= self.max_steps:
-        if r > 1e-5:
-            done = True
+        fb_obs, fb_info = self._make_obs_and_info()
 
-        return text_memory, text_item, r, done or truncated
+        # r = self._reward(action)
+        # if r > 1e-5:
+        #     done = True
+        fb = self.feedback_model.get_feedback(fb_obs, fb_info, truncated)
+        return text_memory, text_item, fb['reward'], fb['terminated'] or truncated
 
     # s_t = q + {R#1} + f^{0}_1 + {R#2} + n^{17}_2 + {R#0} + f^{35}_0
     # s_t = Emb_s(q + f^{0}_1 + f^{35}_0) * Emb_a(n^{17}_2)
@@ -147,8 +156,8 @@ class QAEnv(TextEnv):
     def device(self):
         return self.embedder.device
 
-    def _reward(self, action):
-        return self.reward_model.reward(self, action)
+    # def _reward(self, action):
+    #     return self.reward_model.reward(self, action)
 
     def get_sample_len(self, tokenizer):
         """

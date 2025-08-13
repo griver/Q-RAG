@@ -1,10 +1,10 @@
 max_steps: 6
 num_sentences: 100
-task: "qa2_two-supporting-facts"
+task: "qa2_two-supporting-facts" #"qa1_single-supporting-fact"
 noise_train_path: "../datasets/babilong/pg19-with-sentences/train"
 noise_test_path: "../datasets/babilong/pg19-with-sentences/test"
-facts_train_path: "../datasets/babilong/tasks_1-20_v1-2/en-10k/${envs.task}_train.txt
-facts_test_path: "../datasets/babilong/tasks_1-20_v1-2/en-10k/${envs.task}_test.txt
+facts_train_path: "../datasets/babilong/tasks_1-20_v1-2/en-10k/${envs.task}_train.txt"
+facts_test_path: "../datasets/babilong/tasks_1-20_v1-2/en-10k/${envs.task}_test.txt"
 
 positions_processor: relative
 
@@ -59,8 +59,11 @@ env:
   separator: " [SEP] "        
   sort_by_index: True
   positions_processor: ${envs.positions_processor_dict.${envs.positions_processor}}
-  reward_model:
-    _target_: envs.qa_env.PositionalGTReward
+  feedback_model:
+    _target_: rl.feedback.GroundTruthFeedback
+    penalize_extra_steps: False
+  #reward_model:
+  #  _target_: envs.qa_env.PositionalGTReward
   # Dataset Configuration
   dataset:
     _target_: envs.QADatasetAdapter
@@ -74,8 +77,11 @@ test_env:
   separator: ${envs.env.separator}       
   sort_by_index: ${envs.env.sort_by_index}
   positions_processor: ${envs.env.positions_processor}
-  reward_model:
-    _target_: envs.qa_env.PositionalGTReward
+  feedback_model:
+    _target_: rl.feedback.GroundTruthFeedback
+    penalize_extra_steps: False
+  #reward_model:
+  #  _target_: envs.qa_env.PositionalGTReward
   dataset:
     _target_: envs.QADatasetAdapter
     dataset: *test_dataset
