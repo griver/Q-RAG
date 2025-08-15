@@ -14,7 +14,7 @@ from torchvision.ops.misc import interpolate
 from tqdm import tqdm
 
 # ---- add repository root to PYTHONPATH (so that rl.* modules resolve) ---- #
-repo_dir = os.path.dirname(os.path.abspath("./"))
+repo_dir = os.path.dirname(os.path.abspath("../"))
 if repo_dir not in sys.path:
     sys.path.append(repo_dir)
 
@@ -138,7 +138,7 @@ def evaluate_episode(env: QAEnv, agent: PQN, sample_id=None) -> float:
 
 
 def load_eval_config(name):
-    with initialize(version_base="1.3", config_path="./configs"):
+    with initialize(version_base="1.3", config_path="../configs"):
         eval_cfg = compose(
             config_name=name,
             overrides=sys.argv[1:]

@@ -1,7 +1,7 @@
 from __future__ import annotations
 from abc import ABC, abstractmethod
 from collections import Counter
-from typing import Union
+from typing import Union, Callable
 import re, string
 import signal
 import atexit
@@ -13,6 +13,136 @@ from transformers import AutoTokenizer
 import torch
 
 torch.manual_seed(42)
+
+class LLMAnswerMixin:
+    """Mixin that generates answer text from a question and retrieved chunks."""
+    ANSWER_DEFAULT_SAMPLING_PARAMS = {
+        "temperature": 0.0,
+        "top_p": 0.95,
+        "max_tokens": 32,
+        "stop": None,
+    }
+    ANSWER_DEFAULT_VLLM_CONFIG = {
+        "dtype": "bfloat16",
+        "quantization": None,
+        "trust_remote_code": True,
+        "tensor_parallel_size": 1,
+        "gpu_memory_utilization": 0.8,
+    }
+
+    def __init__(
+            self,
+            use_api: bool,
+            answer_model_name: str,
+            sampling_params: Union[dict, None] = None,
+            vllm_config: Union[dict, None] = None,
+            api_base_url: str = None,
+            api_key: str = '',
+            max_at_same_time: int = 20,
+            prepare_messages_func: Callable = None,
+
+    ):
+
+        self._prepare_messages_func = prepare_messages_func
+        if sampling_params:
+            sampling_params = {**self.ANSWER_DEFAULT_SAMPLING_PARAMS, **sampling_params}
+        else:
+            sampling_params = self.ANSWER_DEFAULT_SAMPLING_PARAMS
+        self.answer_sampling_params = sampling_params
+        self.answer_use_api = use_api
+        self.answer_model_name = answer_model_name
+
+        if not use_api:
+            if vllm_config:
+                vllm_config = {**self.ANSWER_DEFAULT_VLLM_CONFIG, **vllm_config}
+            else:
+                vllm_config = self.ANSWER_DEFAULT_VLLM_CONFIG
+            self.answer_model = LLM(model=answer_model_name, **vllm_config)
+            self.answer_tok = AutoTokenizer.from_pretrained(answer_model_name)
+            self._answer_shutdown_called = False
+            atexit.register(self.__del__)
+            signal.signal(signal.SIGINT, lambda *_: (self.__del__(), exit(130)))
+            signal.signal(signal.SIGTERM, lambda *_: (self.__del__(), exit(0)))
+        else:
+            self.answer_api_client = AsyncOpenAI(api_key=api_key, base_url=api_base_url)
+            self.answer_max_at_same_time = max_at_same_time
+
+    def __del__(self):
+        if getattr(self, '_answer_shutdown_called', False):
+            return
+        self._answer_shutdown_called = True
+        if not getattr(self, 'answer_use_api', False):
+            if hasattr(self, 'answer_model'):
+                del self.answer_model
+                self.answer_model = None
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+                torch.cuda.synchronize()
+
+    def _build_answer_messages(self, question: str, pred_chunks: list[str]):
+        return self._prepare_messages_func(question, pred_chunks)
+        # context = " ".join(pred_chunks)
+        # instruction = "You are an AI assistant. Answer the question based only on the provided context."
+        # user_content = f"Context: {context}\n\nQuestion: {question}"
+        # return [
+        #     {"role": "system", "content": instruction},
+        #     {"role": "user", "content": user_content},
+        # ]
+
+    def _generate_answer_local_vllm(self, prompts: list[str]) -> list[str]:
+        outputs = self.answer_model.generate(
+            prompts=prompts,
+            sampling_params=SamplingParams(**self.answer_sampling_params)
+        )
+        return [out.outputs[0].text.strip() for out in outputs]
+
+    def _generate_answer_api(self, messages_batch: list[list[dict]]) -> list[str]:
+        async def _fetch(messages, sem: asyncio.Semaphore):
+            async with sem:
+                resp = await self.answer_api_client.chat.completions.create(
+                    model=self.answer_model_name,
+                    messages=messages,
+                    **self.answer_sampling_params
+                )
+                return resp.choices[0].message.content
+
+        async def _gather_all():
+            concurrency_limit = min(self.answer_max_at_same_time, len(messages_batch))
+            semaphore = asyncio.Semaphore(concurrency_limit)
+            tasks = [_fetch(m, semaphore) for m in messages_batch]
+            return await asyncio.gather(*tasks)
+
+        try:
+            loop = asyncio.get_running_loop()
+            return asyncio.run_coroutine_threadsafe(_gather_all(), loop).result()
+        except RuntimeError:
+            return asyncio.run(_gather_all())
+
+    def _prepare_prompts(self, questions: list[str], pred_chunks_list: list[list[str]]):
+        prompts = []
+        for q, ch in zip(questions, pred_chunks_list):
+            msgs = self._build_answer_messages(q, ch)
+            if self.answer_use_api:
+                prompts.append(msgs)
+            else:
+                text = self.answer_tok.apply_chat_template(
+                    msgs,
+                    tokenize=False,
+                    add_generation_prompt=True,
+                    enable_thinking=False,
+                )
+                prompts.append(text)
+        return prompts
+
+    def generate_answers(self, questions: list[str], pred_chunks_list: list[list[str]]) -> list[str]:
+        prompts = self._prepare_prompts(questions, pred_chunks_list)
+        if self.answer_use_api:
+            return self._generate_answer_api(prompts)
+        else:
+            return self._generate_answer_local_vllm(prompts)
+
+    def generate_answer(self, question: str, pred_chunks: list[str]) -> str:
+        return self.generate_answers([question], [pred_chunks])[0]
 
 
 
@@ -218,60 +348,93 @@ FINAL ANSWER: your final answer (only "YES" or "NO" allowed here) """
         return rewards[0] if len(rewards) == 1 else rewards
 
 
-class ExactMatchFeedback(AFeedbackModel):
+
+class AnswerMetricFeedback(AFeedbackModel, LLMAnswerMixin):
     FEEDBACK_MODEL_NAME = 'EM'
 
     # ReSearcher, Search-R1
     def __init__(
             self,
+            use_api: bool,
+            answer_model_name: str,
             completion_reward: float = 1.0,
+            sampling_params: Union[dict, None] = None,
+            vllm_config: Union[dict, None] = None,
+            api_base_url: str = None,
+            api_key: str = '',
+            max_at_same_time: int = 20,
+            metric: Callable = None,
+            prepare_messages_func: Callable = None,
     ):
         AFeedbackModel.__init__(self)
+        LLMAnswerMixin.__init__(
+            self,
+            use_api=use_api,
+            answer_model_name=answer_model_name,
+            sampling_params=sampling_params,
+            vllm_config=vllm_config,
+            api_base_url=api_base_url,
+            api_key=api_key,
+            max_at_same_time=max_at_same_time,
+            prepare_messages_func=prepare_messages_func
+        )
         self.completion_reward = completion_reward
+        self.metric = metric
 
-    def _normalize_answer(self, s: str) -> str:
-        """Lower text and remove punctuation, articles and extra whitespace."""
+    # def _normalize_answer(self, s: str) -> str:
+    #     """Lower text and remove punctuation, articles and extra whitespace."""
+    #
+    #     def remove_articles(text):
+    #         return re.sub(r"\b(a|an|the)\b", " ", text)
+    #
+    #     def white_space_fix(text):
+    #         return " ".join(text.split())
+    #
+    #     def remove_punc(text):
+    #         exclude = set(string.punctuation)
+    #         return "".join(ch for ch in text if ch not in exclude)
+    #
+    #     def lower(text):
+    #         return text.lower()
+    #
+    #     return white_space_fix(remove_articles(remove_punc(lower(s.strip()))))
 
-        def remove_articles(text):
-            return re.sub(r"\b(a|an|the)\b", " ", text)
+    # def exact_match(self, predicted_answer, true_answer):
+    #     true_answer, predicted_answer = self._normalize_answer(true_answer), self._normalize_answer(predicted_answer)
+    #     return int(predicted_answer == true_answer)
 
-        def white_space_fix(text):
-            return " ".join(text.split())
-
-        def remove_punc(text):
-            exclude = set(string.punctuation)
-            return "".join(ch for ch in text if ch not in exclude)
-
-        def lower(text):
-            return text.lower()
-
-        return white_space_fix(remove_articles(remove_punc(lower(s.strip()))))
-
-    def exact_match(self, predicted_answer, true_answer):
-        true_answer, predicted_answer = self._normalize_answer(true_answer), self._normalize_answer(predicted_answer)
-        return int(predicted_answer == true_answer)
-
-    def reward(self,
+    def score_answer_pred(self,
                predicted_answer: Union[str, list[str]],
                true_answer: Union[str, list[str]]
                ) -> Union[float, list[float]]:
 
-        # Преобразуем в списки если переданы строки
+        # if intput is not a batch
         if isinstance(predicted_answer, str):
             predicted_answer = [predicted_answer]
             true_answer = [true_answer]
 
-        # Вычисляем exact match для каждого элемента батча
-        em_scores = []
+        rewards = []
         for pred_ans, true_ans in zip(predicted_answer, true_answer):
-            em_score = self.exact_match(pred_ans, true_ans)
-            em_scores.append(em_score)
+            score = self.metric(pred_ans, true_ans)
+            #em_score = self.exact_match(pred_ans, true_ans)
+            #print('preds:', pred_ans, 'targets:', true_ans, 'score:', em_score)
+            rewards.append(score*self.completion_reward)
 
-        # Вычисляем награды для каждого элемента батча
-        rewards = [self.completion_reward if em_score else 0. for em_score in em_scores]
-
-        # Возвращаем одно значение если был передан один элемент
         return rewards[0] if len(rewards) == 1 else rewards
+
+    def reset(self, obs, info):
+        super().reset(obs, info)
+
+    def reward(self, obs, info, is_final=None):
+        question = obs['question']
+        pred_chunks = obs.get('pred_chunks', [])
+        predicted_answer = self.generate_answer(question, pred_chunks)
+        true_answer = info.get('answer')
+        if true_answer is None and 'sf_chunks' in info:
+            true_answer = " ".join(info['sf_chunks'])
+        reward = self.score_answer_pred(predicted_answer, true_answer)
+        self.completed = True
+        return reward
 
 
 class F1ScoreFeedback(AFeedbackModel):

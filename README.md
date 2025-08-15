@@ -1,7 +1,7 @@
 # Multi-Step Retrieval via Reinforcement Learning 
 
 ## Training
-To train Contriever Embedder with PQN on Babilong see `train_babi_pqn.py`. 
+To train Contriever Embedder with Q-RAG on Babilong see `train_pqn.py`. 
 To modify hyperparameters either use yaml configs or CLI.
 
 #### Configs

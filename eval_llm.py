@@ -81,9 +81,23 @@ def main():
         "template": TEMPLATE,
     }
     compute_f1 = gen_f1_metric(args.babi_task)
+    vllm_config = {
+        'gpu_memory_utilization': args.gpu_util,
+        'max_model_len': 2048,
+        'dtype': 'bfloat16', #new values start here
+        'quantization': None,
+        'tensor_parallel_size': 1,
+        'trust_remote_code': True,
+    }
+    sampling_params = {
+        'max_tokens': args.max_tokens,
+        'temperature': 0.0,
+        "stop": None,
+        'top_p': 0.95
+    }
 
-    llm = LLM(model=args.llm_name, gpu_memory_utilization=args.gpu_util)
-    sampling_params = SamplingParams(max_tokens=args.max_tokens, temperature=0.0)
+    llm = LLM(model=args.llm_name, **vllm_config)
+    sampling_params = SamplingParams(**sampling_params)
 
     out_path = os.path.join(
         os.path.dirname(args.retriever_logfile),
