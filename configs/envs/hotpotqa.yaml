@@ -39,13 +39,15 @@ env:
   separator: " [SEP] "
   sort_by_index: ${envs.sort_by_index}
   positions_processor: ${envs.positions_processor_dict.${envs.positions_processor}}
-  reward_model:
-    _target_: envs.qa_env.PositionalGTReward
+  feedback_model:
+    _target_: rl.feedback.GroundTruthFeedback
+    penalize_extra_steps: False
+#  reward_model:
+#    _target_: envs.qa_env.PositionalGTReward
   # Dataset Configuration
   dataset:
     _target_: envs.QADatasetAdapter
     dataset: *train_dataset
-
 
 test_env:
   _target_: envs.qa_env.QAEnv
@@ -54,8 +56,11 @@ test_env:
   separator: ${envs.env.separator}
   sort_by_index: ${envs.sort_by_index}
   positions_processor: ${envs.env.positions_processor}
-  reward_model:
-    _target_: envs.qa_env.PositionalGTReward
+  feedback_model:
+    _target_: rl.feedback.GroundTruthFeedback
+    penalize_extra_steps: False
+#  reward_model:
+#    _target_: envs.qa_env.PositionalGTReward
   dataset:
     _target_: envs.QADatasetAdapter
     dataset: *test_dataset

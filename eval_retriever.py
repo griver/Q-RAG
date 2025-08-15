@@ -115,6 +115,7 @@ def evaluate_episode(env: QAEnv, agent: PQN, sample=None) -> dict:
         embeds = env.update_embeds(embeds, agent.critic.action_embed)
         embeds_target = env.update_embeds(embeds_target, agent.action_embed_target)
 
+        #actions, _, _ = agent.select_n_actions(..., num_actions=K)
         action, _, _ = agent.select_action(
             state,
             embeds["rope"], embeds_target["rope"],
@@ -191,7 +192,11 @@ def main(argv: List[str] | None = None) -> None:
     # -----------------------------------------------------------------------
     # Evaluate with logging
     # -----------------------------------------------------------------------
-    log_name = f"eval_seed{cfg.seed}_ns{cfg.envs.num_sentences}.jsonl"
+    if cfg.envs.task not in ['hotpotqa', 'musique']:
+        log_name = f"eval_seed{cfg.seed}_ns{cfg.envs.num_sentences}.jsonl"
+    else:
+        log_name = f"eval_seed{cfg.seed}.jsonl"
+
     log_path = os.path.join(cfg.pretrained_path, log_name)
 
     existing = {}
