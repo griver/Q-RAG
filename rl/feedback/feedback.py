@@ -29,6 +29,10 @@ class AFeedbackModel(ABC):
     def reward(self, obs, info, is_final=None):
         pass
 
+    @abstractmethod
+    def copy(self):
+        pass
+
 
 class GroundTruthFeedback(AFeedbackModel):
     """
@@ -85,3 +89,10 @@ class GroundTruthFeedback(AFeedbackModel):
                 term_r = self.completion_reward
 
         return term_r + step_r
+
+    def copy(self):
+        return GroundTruthFeedback(
+            penalize_extra_steps=self.penalize_extra_steps,
+            completion_reward=self.completion_reward,
+            per_fact_reward=self.per_fact_reward,
+        )

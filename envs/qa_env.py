@@ -82,7 +82,7 @@ class QAEnv(TextEnv):
             max_steps = self.max_steps,
             positions_processor = self.positions_processor,
             action_embed_length = self.action_embed_length,
-            feedback_model=self.feedback_model,
+            feedback_model=self.feedback_model.copy(),
             #reward_model = self.reward_model,
             max_embedding_batch = self.max_embedding_batch,
             separator = self.separator,             
