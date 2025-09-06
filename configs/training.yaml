@@ -12,5 +12,5 @@ batch_size: 32
 accumulate_grads: 2
 eval_interval: 300
 eval_episodes: 300
-envs_parallel: 4
+envs_parallel: 3
 max_action_length: 64
