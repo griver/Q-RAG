@@ -1,26 +1,40 @@
 from abc import abstractmethod
-import numpy as np
-from torch import nn, Tensor
-import torch
 from collections import namedtuple
-from typing import Tuple, Dict, List, Any, Union
-from transformers import PreTrainedTokenizer, PreTrainedTokenizerFast
-import os
-from torch.nn.utils.rnn import pad_sequence
-from sortedcontainers import SortedList
+from dataclasses import dataclass
 from functools import reduce
+from typing import List, Tuple, Optional, Dict, Any
+import numpy as np
+import torch
+from torch import nn
+from transformers import PreTrainedTokenizer, PreTrainedTokenizerFast
 from envs.text_env import TextEnv
-from envs.utils import custom_pad_sequence, stack_actions, stack_memory
+from envs.utils import TextMemory, custom_pad_sequence, stack_actions, stack_memory
 
 
-TrainBatch = namedtuple("TrainBatch", [
-   "state", "action", "reward", "next_state", "not_done", "q_values"
-])
+@dataclass
+class TrainBatch:
+    state: torch.Tensor
+    action: torch.Tensor
+    reward: torch.Tensor
+    next_state: torch.Tensor
+    not_done: torch.Tensor
+    q_values: torch.Tensor
+
+@dataclass
+class EnvData:
+    not_dones: List[int]
+    q_values: List[float]
+    rewards: List[float]
+    states: List[Any]
+    actions: List[Any]
+    next_states: List[Any]
+    reward_sum: float = 0.0
 
 
 class ParallelTextEnv:
 
-    def __init__(self, text_envs: List[TextEnv], 
+    def __init__(self, 
+                 text_envs: List[TextEnv], 
                  state_tokenizer: PreTrainedTokenizer, 
                  action_tokenizer: PreTrainedTokenizer):
         
@@ -28,89 +42,226 @@ class ParallelTextEnv:
         self.state_tokenizer = state_tokenizer
         self.action_tokenizer = action_tokenizer
         self.action_embed_length = text_envs[0].action_embed_length
+        self.device = torch.get_default_device()
+        
 
-        self.tmp_data = [[] for _ in range(len(self.text_envs))]
-        # self.episodes = []
-
-    def reset(self):
-        memory = [e.reset() for e in self.text_envs]
-        return memory, stack_memory(memory, self.state_tokenizer, max_length=self.action_embed_length)
+    def reset(self) -> Tuple[List[TextMemory], TextMemory]:
+        """
+        Reset all environments.
+        
+        Returns:
+            Tuple of (memory list, stacked memory tensor)
+        """
+        memory = [env.reset() for env in self.text_envs]
+        stacked_memory = stack_memory(
+            memory, 
+            self.state_tokenizer, 
+            max_length=self.action_embed_length
+        )
+        return memory, stacked_memory
     
-    def rollout(self, n, s_seq, agent, random):
-
-        a_embeds, a_embeds_target = self.get_extra_embeds(agent.critic.action_embed, agent.action_embed_target)
-        env_index = list(range(len(self.text_envs)))
-        episodes = []
+    
+    @torch.no_grad()
+    def rollout(self, 
+                n: int, 
+                cur_s_seq: List[Any], 
+                agent: Any, 
+                random: bool = False) -> Tuple[List[Any], List[float], TrainBatch]:
+        """
+        Perform rollout for n steps across all environments.
+        
+        Args:
+            n: Number of steps to rollout
+            cur_s_seq: Current state sequence for each environment
+            agent: Agent instance for action selection
+            random: Whether to use random actions
+        
+        Returns:
+            Tuple of (new_state_seq, rewards, TrainBatch)
+        """
+    
+        a_embeds, a_embeds_target = self.get_extra_embeds(
+            agent.critic.action_embed, 
+            agent.action_embed_target
+        )
+        
+        env_count = len(self.text_envs)
+        env_data = [EnvData([], [], [], [], [], []) for _ in range(env_count)]
         rewards = []
-
-        s_par = stack_memory(s_seq, self.state_tokenizer, max_length=self.action_embed_length)
-        new_state_seq = []
-
         size = 0
+        
+        # Precompute stacked states
+        s_par = stack_memory(
+            cur_s_seq, 
+            self.state_tokenizer, 
+            max_length=self.action_embed_length
+        )
 
-        while size < n:
-
+        while size < n + env_count:
+            # Update embeddings
             a_embeds = self.update_embeds(a_embeds, agent.critic.action_embed)
             a_embeds_target = self.update_embeds(a_embeds_target, agent.action_embed_target)
 
-            a_embeds_pos = [emb["rope"] for emb in a_embeds]
-            a_embeds_target_pos = [emb["rope"] for emb in a_embeds_target]
-            # TODO: custom_pad_sequence was changed to accept two new arguments: padding_side, and pad_to_power_2.
-            #  For example Qwen3 Embedder uses left padding for texts.
-            #  Please consider how this change will affect two lines below.
-            embeds_pt = custom_pad_sequence(a_embeds_pos, padding_value=0.0, batch_first=True, pad_to_power_2=False)
-            embeds_target_pt = custom_pad_sequence(a_embeds_target_pos, padding_value=0.0, batch_first=True, pad_to_power_2=False)
+            # Prepare embeddings for batch processing
+            embeds_pt, embeds_target_pt = self._prepare_embeddings(
+                a_embeds, 
+                a_embeds_target
+            )
         
-            action, _, q_values  = agent.select_action_batch(s_par, embeds_pt, embeds_target_pt, random=random)
+            # Select actions in batch
+            action, _, q_values = agent.select_action_batch(
+                s_par, embeds_pt, embeds_target_pt, random=random
+            )
             action = action.cpu().numpy().reshape(-1)
             q_values = q_values.cpu().numpy().reshape(-1)
-            new_state_seq = []
-
-            for i, si, ai, qi, env in zip(env_index, s_seq, action, q_values, self.text_envs):
-                transition = env.step_and_maybe_reset(ai, self.action_tokenizer, agent.critic.action_embed, agent.action_embed_target)
-                transition = transition._replace(state=si, q_values=qi)
-                self.tmp_data[i].append(transition)
-                new_state_seq.append(transition.new_state)
-                if transition.done:
-                    a_embeds[i], a_embeds_target[i] = transition.embeds
-                    episodes.append(self.tmp_data[i])
-                    size += len(self.tmp_data[i])
-                    self.tmp_data[i] = []
-        
-            s_seq = new_state_seq
-            s_par = stack_memory(s_seq, self.state_tokenizer, max_length=self.action_embed_length)
-
-        s_seq, a_seq, r_seq, s_next_seq, not_dones_seq, q_seq = [], [], [], [], [], [] 
-        r_sum = 0.0
-
-        all_episodes = reduce(lambda e1, e2: e1 + e2, episodes)
-        # offset = 0 if len(all_episodes) <= n else np.random.randint(0, len(all_episodes) - n)
-
-        for tr in all_episodes:
-            s_seq.append(tr.state)
-            a_seq.append(tr.action)
-            s_next_seq.append(tr.next_state)
-            r_seq.append(tr.reward)
-            not_dones_seq.append(1 - int(tr.done))
-            q_seq.append(tr.q_values)
             
-            r_sum += tr.reward
-            if tr.done:
-                rewards.append(r_sum)
-                r_sum = 0.0
+            # Process environment steps
+            new_state_seq = self._process_env_steps(
+                cur_s_seq, action, q_values, agent, env_data, 
+                a_embeds, a_embeds_target, rewards
+            )
+            
+            size += env_count
+            
+            # Update for next iteration
+            cur_s_seq = new_state_seq
+            s_par = stack_memory(
+                cur_s_seq, 
+                self.state_tokenizer, 
+                max_length=self.action_embed_length
+            )
 
-        s_stack = stack_memory(s_seq, self.state_tokenizer, max_length=self.action_embed_length)
-        next_s_stack = stack_memory(s_next_seq, self.state_tokenizer, max_length=self.action_embed_length)
-        a_stack = stack_actions(a_seq, self.action_tokenizer, max_length=self.action_embed_length)
+        # Prepare training data
+        train_batch = self._prepare_train_batch(env_data)
+        
+        return cur_s_seq, rewards, train_batch
+    
 
-        return new_state_seq, rewards, TrainBatch(
-            state=s_stack,
-            q_values=torch.FloatTensor(q_seq).to(torch.get_default_device()),
-            action=a_stack,
-            reward=torch.FloatTensor(r_seq).to(torch.get_default_device()),
-            next_state=next_s_stack,
-            not_done=torch.IntTensor(not_dones_seq).to(torch.get_default_device()),
+    def _prepare_embeddings(self, 
+                           a_embeds: List[Dict], 
+                           a_embeds_target: List[Dict]) -> Tuple[torch.Tensor, torch.Tensor]:
+    
+        a_embeds_pos = [emb["rope"] for emb in a_embeds]
+        a_embeds_target_pos = [emb["rope"] for emb in a_embeds_target]
+        
+        embeds_pt = custom_pad_sequence(
+            a_embeds_pos, 
+            padding_value=0.0, 
+            batch_first=True, 
+            pad_to_power_2=False
         )
+        embeds_target_pt = custom_pad_sequence(
+            a_embeds_target_pos, 
+            padding_value=0.0, 
+            batch_first=True, 
+            pad_to_power_2=False
+        )
+        
+        return embeds_pt, embeds_target_pt
+    
+
+    def _process_env_steps(self,
+                          cur_s_seq: List[Any],
+                          actions: np.ndarray,
+                          q_values: np.ndarray,
+                          agent: Any,
+                          env_data: List[EnvData],
+                          a_embeds: List[Dict],
+                          a_embeds_target: List[Dict],
+                          rewards: List[float]) -> List[Any]:
+        
+        new_state_seq = []
+        
+        for i, (env, data) in enumerate(zip(self.text_envs, env_data)):
+            transition = env.step_and_maybe_reset(
+                actions[i], 
+                self.action_tokenizer, 
+                agent.critic.action_embed, 
+                agent.action_embed_target
+            )
+            
+            # Enhance transition with current data
+            transition = transition._replace(
+                state=cur_s_seq[i], 
+                q_values=q_values[i]
+            )
+            
+            # Store data
+            data.states.append(transition.state)
+            data.actions.append(transition.action)
+            data.next_states.append(transition.next_state)
+            data.rewards.append(transition.reward)
+            data.not_dones.append(1 - int(transition.done))
+            data.q_values.append(q_values[i])
+            data.reward_sum += transition.reward
+            
+            new_state_seq.append(transition.new_state)
+            
+            # Handle episode completion
+            if transition.done:
+                a_embeds[i], a_embeds_target[i] = transition.embeds
+                rewards.append(data.reward_sum)
+                data.reward_sum = 0.0
+        
+        return new_state_seq
+    
+
+    def _flatten_env_data(self, env_data: List[EnvData]) -> Dict[str, List]:
+        """Flatten environment data into single lists"""
+        result = {
+            'states': [],
+            'actions': [],
+            'next_states': [],
+            'rewards': [],
+            'not_dones': [],
+            'q_values': []
+        }
+        
+        for data in env_data:
+            if data.states:
+                # For Q update
+                result['states'].extend(data.states[:-1])
+                result['actions'].extend(data.actions[:-1])
+                result['next_states'].extend(data.next_states[:-1])
+                # For TD targets
+                result['rewards'].append(data.rewards)
+                result['not_dones'].append(data.not_dones)
+                result['q_values'].append(data.q_values)
+        
+        return result
+    
+
+    def _prepare_train_batch(self, env_data: List[EnvData]) -> TrainBatch:
+        """Prepare training batch from collected environment data"""
+        # Flatten data from all environments
+        all_data = self._flatten_env_data(env_data)
+        
+        # Stack data for training
+        s_stack = stack_memory(
+            all_data['states'], 
+            self.state_tokenizer, 
+            max_length=self.action_embed_length
+        )
+        next_s_stack = stack_memory(
+            all_data['next_states'], 
+            self.state_tokenizer, 
+            max_length=self.action_embed_length
+        )
+        a_stack = stack_actions(
+            all_data['actions'], 
+            self.action_tokenizer, 
+            max_length=self.action_embed_length
+        )
+        
+        return TrainBatch(
+            state=s_stack,
+            q_values=torch.FloatTensor(all_data['q_values']).to(self.device),
+            action=a_stack,
+            reward=torch.FloatTensor(all_data['rewards']).to(self.device),
+            next_state=next_s_stack,
+            not_done=torch.IntTensor(all_data['not_dones']).to(self.device),
+        )
+    
     
     @torch.no_grad()
     def get_extra_embeds(self, embedder: nn.Module, embedder_target: nn.Module) -> np.ndarray:

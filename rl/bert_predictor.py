@@ -186,7 +186,13 @@ class PositionalRotaryEmbedding(rotary_embedding_torch.RotaryEmbedding):
         if seq_dim == -3:
             freqs = rearrange(freqs, 'n d -> n 1 d')
 
-        return apply_rotary_emb(freqs, t, scale = scale, seq_dim = seq_dim)
+        # return apply_rotary_emb(freqs, t, scale = scale, seq_dim = seq_dim)
+        D = t.shape[-1] // 2
+
+        t1 = apply_rotary_emb(freqs, t[..., :D], scale = scale, seq_dim = seq_dim)
+        t2 = apply_rotary_emb(freqs, t[..., D:], scale = scale, seq_dim = seq_dim)
+
+        return torch.cat([t1, t2], dim=-1)
     
 
 class EmbedderBase(nn.Module, ABC):
