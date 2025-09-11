@@ -1,5 +1,6 @@
 import re
-
+from .answer_metric import AnswerMetric
+from typing import List
 #this file is taken from official github repository for BabiLong
 TASK_TEMPLATE = '{instruction}\n\n{examples}\n\n{post_prompt}'
 USER_TEMPLATE = '<context>\n{context}\n</context>\n\nQuestion: {question}'
@@ -546,25 +547,61 @@ TASK_LABELS = {'qa1': ['bathroom', 'bedroom', 'garden', 'hallway', 'kitchen', 'o
 }
 
 
-def compute_exact_match(prediction, target):
-    "Works for QA1-QA4 and every  task with single answer."
-    prediction = prediction.strip(" .").split()[-1]
-    return prediction.lower() == target.strip().lower()
+class BabilongPromptFormatter:
+
+    def __init__(self, babi_task):
+        super().__init__()
+        self.babi_task = babi_task.split('_')[0] #qa2_two-supporting-facts_test -> qa2, qa2 -> qa2
+        self.prompt_cfg = {
+            "instruction": DEFAULT_PROMPTS[self.babi_task]["instruction"],
+            "examples": DEFAULT_PROMPTS[self.babi_task]["examples"],
+            "post_prompt": DEFAULT_PROMPTS[self.babi_task]["post_prompt"],
+            "template": TEMPLATE,
+        }
+
+    def __call__(self, question: str, facts: List[str]): #, prompt_cfg: dict=None, user_template: str=None):
+        """Create chat messages for the language model."""
+        str_of_facts = " ".join(facts)
+        input_text = get_formatted_input(
+            str_of_facts,
+            question,
+            self.prompt_cfg["examples"],
+            self.prompt_cfg["instruction"],
+            self.prompt_cfg["post_prompt"],
+            template=self.prompt_cfg['template'],
+        )
+        messages = [
+            {
+                "role": "system",
+                "content": "Your are an AI assistant, your job is to answer questions given to you by the user.",
+            },
+            {"role": "user", "content": input_text},
+        ]
+        return messages
 
 
-def gen_f1_metric(babi_task_name):
-    """
-    F1 score function is task dependent in case of Babilong.
-    This function receives name of the Babi Task ('qa1', 'qa2', etc.) and returns correspondent F1 function
-    """
-    def compute_f1(prediction, target):
+class BabilongExactMatch(AnswerMetric):
+    """Exact match metric for Babilong tasks with single answer."""
 
-        task_labels = set(TASK_LABELS[babi_task_name])
+    def __call__(self, prediction, target):
+        "Works for QA1-QA5 and every task with single answer."
+        prediction = prediction.strip(" .").split()[-1]
+        return prediction.lower() == target.strip().lower()
+
+
+class BabilongF1(AnswerMetric):
+    """Task-dependent F1 score for Babilong tasks."""
+
+    def __init__(self, babi_task_name):
+        #babi_task_name: 'qa1', 'qa2', etc.
+        self.task_labels = set(TASK_LABELS[babi_task_name])
+
+    def __call__(self, prediction, target):
         target = target.lower()
 
         # extract labels that were mentioned in the model output
-        labels_in_pred = {label for label in task_labels if label in prediction}
-        labels_in_target = {label for label in task_labels if label in target}
+        labels_in_pred = {label for label in self.task_labels if label in prediction}
+        labels_in_target = {label for label in self.task_labels if label in target}
         num_same = len(labels_in_pred.intersection(labels_in_target))
 
         if len(labels_in_target) == 0 or len(labels_in_pred) == 0:
@@ -572,11 +609,38 @@ def gen_f1_metric(babi_task_name):
             return float(len(labels_in_pred) == len(labels_in_target))
 
         if num_same == 0:
-            return 0.
+            return 0.0
 
         precision = 1.0 * num_same / len(labels_in_pred)
         recall = 1.0 * num_same / len(labels_in_target)
         f1 = (2 * precision * recall) / (precision + recall)
         return f1
 
-    return compute_f1
+# def gen_f1_metric(babi_task_name):
+#     """
+#     F1 score function is task dependent in case of Babilong.
+#     This function receives name of the Babi Task ('qa1', 'qa2', etc.) and returns correspondent F1 function
+#     """
+#     def compute_f1(prediction, target):
+#
+#         task_labels = set(TASK_LABELS[babi_task_name])
+#         target = target.lower()
+#
+#         # extract labels that were mentioned in the model output
+#         labels_in_pred = {label for label in task_labels if label in prediction}
+#         labels_in_target = {label for label in task_labels if label in target}
+#         num_same = len(labels_in_pred.intersection(labels_in_target))
+#
+#         if len(labels_in_target) == 0 or len(labels_in_pred) == 0:
+#             # If either is no-answer, then F1 is 1 if they agree, 0 otherwise
+#             return float(len(labels_in_pred) == len(labels_in_target))
+#
+#         if num_same == 0:
+#             return 0.
+#
+#         precision = 1.0 * num_same / len(labels_in_pred)
+#         recall = 1.0 * num_same / len(labels_in_target)
+#         f1 = (2 * precision * recall) / (precision + recall)
+#         return f1
+#
+#     return compute_f1

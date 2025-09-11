@@ -1,11 +1,13 @@
 from abc import ABC, abstractmethod
 
+
 class AFeedbackModel(ABC):
     FEEDBACK_MODEL_NAME: str
 
     @abstractmethod
-    def __init__(self):
+    def __init__(self, never_terminate=False):
         self.completed = False
+        self.never_terminate = never_terminate
 
     @abstractmethod
     def reset(self, obs, info):
@@ -19,11 +21,12 @@ class AFeedbackModel(ABC):
         :return: a dict containing information about rewards and termination of the episode.
         """
         reward = self.reward(obs, info, is_final=truncated)
-        terminated = self.completed
+        terminated = False if self.never_terminate else self.completed
         return {
             'reward': reward,
             'terminated': terminated,
         }
+
 
     @abstractmethod
     def reward(self, obs, info, is_final=None):
@@ -32,6 +35,22 @@ class AFeedbackModel(ABC):
     @abstractmethod
     def copy(self):
         pass
+
+
+class DummyFeedbackModel(AFeedbackModel):
+    """
+    Dummy feedback model. Always return 0. reward, never terminates an episode before truncation.
+    Maybe usefull for parallel env execution.
+    """
+    FEEDBACK_MODEL_NAME: "dummy"
+    def __init__(self):
+        super().__init__(never_terminate=True)
+
+    def reward(self, obs, info, is_final=None):
+        return 0.
+
+    def copy(self):
+        return DummyFeedbackModel()
 
 
 class GroundTruthFeedback(AFeedbackModel):
@@ -46,8 +65,9 @@ class GroundTruthFeedback(AFeedbackModel):
     This reward takes into account temporal information that allows to distinguish
     true support facts, from similar events.
     """
-    def __init__(self, penalize_extra_steps=False, completion_reward=1.0, per_fact_reward=0.0):
-        super().__init__()
+    FEEDBACK_MODEL_NAME="ground_truth"
+    def __init__(self, penalize_extra_steps=False, completion_reward=1.0, per_fact_reward=0.0, never_terminate=False):
+        super().__init__(never_terminate=never_terminate)
         #r_0 = 0.1, r_1 = 1.1
         self.per_fact_reward = per_fact_reward
         self.completion_reward = completion_reward
@@ -60,14 +80,6 @@ class GroundTruthFeedback(AFeedbackModel):
         self.sf_idx = None
         self.found_facts.clear()
         self.completed = False
-
-    def get_feedback(self, obs, info, truncated=False):
-        reward = self.reward(obs, info, is_final=truncated)
-        terminated = self.completed
-        return {
-            'reward': reward,
-            'terminated': terminated,
-        }
 
     def reward(self, obs, info, is_final=None) -> float:
         #this reward doesn't care if the step was final or not
@@ -96,3 +108,4 @@ class GroundTruthFeedback(AFeedbackModel):
             completion_reward=self.completion_reward,
             per_fact_reward=self.per_fact_reward,
         )
+

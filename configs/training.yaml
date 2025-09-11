@@ -1,7 +1,9 @@
 defaults:
   - envs: babilong 
+  - feedback: defaults
   - algo: pqn
   - logger: logging
+
   - _self_
 
 seed: 42
@@ -12,5 +14,5 @@ batch_size: 32
 accumulate_grads: 2
 eval_interval: 300
 eval_episodes: 300
-envs_parallel: 4
+envs_parallel: 1
 max_action_length: 64

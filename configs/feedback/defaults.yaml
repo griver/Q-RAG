@@ -1,0 +1,60 @@
+type: gt
+# type=gt # for ground truth from facts
+# type=babilong_em # for exact match from LLM generated answers with babilong prompts
+never_terminate: False
+
+ground_truth: &ground_truth
+  _target_: rl.feedback.GroundTruthFeedback
+  penalize_extra_steps: False
+
+exact_match: &babi_exact_match
+  _target_: rl.feedback.AnswerMetricFeedback
+  llm_generator:
+    _target_: rl.feedback.LLMGenerator
+    use_api: ${feedback.use_api}
+    model_name: ${feedback.model}
+    sampling_params: ${feedback.sampling_params}
+    vllm_config: ${feedback.vllm_config}
+    api_base_url: ${feedback.api_base_url}
+    api_key: ${feedback.api_key}
+    max_at_same_time: ${feedback.max_at_same_time}
+    prepare_messages_func: ${feedback.prompt_formatter}
+
+  metric: ${feedback.metric}
+  completion_threshold: ${feedback.reward_scaling}
+  reward_scaling: ${feedback.reward_scaling}
+  never_terminate: ${feedback.never_terminate}
+
+feedback_dict:
+  gt: *ground_truth
+  babilong_em: *babi_exact_match
+  #llm: *llm_judge:
+  #  _target_: envs.text_env.RelativePositionProcessor
+
+use_api: false
+model: 'Qwen/Qwen3-1.7B'
+reward_scaling: 1.0
+
+sampling_params:
+  max_tokens: 32
+  temperature: 0.0
+  top_p: 0.95
+
+vllm_config:
+  gpu_memory_utilization: 0.4
+  max_model_len: 2048
+  dtype: bfloat16
+  quantization: null
+  tensor_parallel_size: 1
+  trust_remote_code: true
+
+api_base_url: null
+api_key: ""
+max_at_same_time: 20
+
+metric:
+  _target_: prompts_and_metrics.babilong.BabilongExactMatch
+
+prompt_formatter:
+  _target_: prompts_and_metrics.babilong.BabilongPromptFormatter
+  babi_task: ${envs.task}

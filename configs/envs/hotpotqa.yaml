@@ -39,9 +39,10 @@ env:
   separator: " [SEP] "
   sort_by_index: ${envs.sort_by_index}
   positions_processor: ${envs.positions_processor_dict.${envs.positions_processor}}
-  feedback_model:
-    _target_: rl.feedback.GroundTruthFeedback
-    penalize_extra_steps: False
+  feedback_model: ${feedback.feedback_dict.${feedback.type}}
+#  feedback_model:
+#    _target_: rl.feedback.GroundTruthFeedback
+#    penalize_extra_steps: False
 #  reward_model:
 #    _target_: envs.qa_env.PositionalGTReward
   # Dataset Configuration

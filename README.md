@@ -6,6 +6,10 @@ To train Contriever Embedder with Q-RAG on Babilong see `train_pqn.py`.
 To modify hyperparameters either use yaml configs or CLI.
 Use `train_q_rag.py` to train the Contriever embedder with Q-RAG. The script supports the **Babilong**, **HotpotQA** and **Musique** datasets.
 
+### Datasets
+All HotPotQA, Musique and BabiLong data can be downloaded from the following link: [Google Drive](https://drive.google.com/drive/folders/1UUIx-6vEBF9Mij81iVgPul86aXhdyxhG).
+
+
 ### Configs
 All hyperparameters are set in `configs/`. Useful files include:
 * `configs/training.yaml`
