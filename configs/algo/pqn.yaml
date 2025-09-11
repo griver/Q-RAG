@@ -78,9 +78,9 @@ pqn:
 
   hyperparams:
     gamma: 0.99
-    alpha: 0.005
-    Lambda: 0.6
-    tau: 0.02
+    alpha: 0.01
+    Lambda: 0.65
+    tau: 0.1
     max_grad_norm: 2.
     accumulate_grads: ${accumulate_grads}
     action_embed_length: ${max_action_length}

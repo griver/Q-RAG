@@ -19,7 +19,7 @@ from hydra.utils import instantiate
 @partial(torch.compile)
 def policy_apply(policy, v_net, state, a_embeds,  a_embeds_target, alpha, return_argmax: bool):
     action, q_values = policy(state, a_embeds, alpha, return_argmax)
-    v1, v2 = v_net(state, a_embeds_target, alpha=alpha / 10)
+    v1, v2 = v_net(state, a_embeds_target, alpha=alpha)
     q_values_target = v1 + v2
     return action, q_values, q_values_target
 
@@ -78,8 +78,9 @@ class PQN(object):
             reward_batch = reward_batch.squeeze()
             
             qf_1, qf_2 = critic(state_batch, action_batch)
-            qf = qf_1 + qf_2  
-            qf_loss = F.mse_loss(qf, reward_batch)   
+            qf_1, qf_2 = qf_1.squeeze(), qf_2.squeeze()
+            # qf_loss = F.mse_loss(qf_1 + qf_2, reward_batch)   
+            qf_loss = 0.5 * F.mse_loss(2 * qf_1, reward_batch) + 0.5 * F.mse_loss(2 * qf_2, reward_batch)   
             
             (qf_loss / self.accumulate_grads).backward()
 
@@ -142,32 +143,36 @@ class PQN(object):
                 reward_batch: Tensor, 
                 mask_batch: Tensor):
         
-        last_q = mask_batch[-2] * q_values_batch[-1]
-        lambda_returns = reward_batch[-2] + self.gamma * last_q
+        
+        last_q = mask_batch[:, -2] * q_values_batch[:, -1]
+        lambda_returns = reward_batch[:, -2] + self.gamma * last_q
 
         targets = [lambda_returns]
 
-        for t in range(q_values_batch.shape[0] - 3, -1, -1):
-            lambda_returns, last_q = self._get_target(lambda_returns, last_q, q_values_batch[t], reward_batch[t], mask_batch[t])
+        for t in range(q_values_batch.shape[1] - 3, -1, -1):
+            lambda_returns, last_q = self._get_target(lambda_returns, last_q, q_values_batch[:, t], reward_batch[:, t], mask_batch[:, t])
             targets.append(lambda_returns)
 
         targets.reverse()
-        targets = torch.stack(targets) 
-        
+        targets = torch.stack(targets, dim=1)
+        assert targets.shape[0] == q_values_batch.shape[0]
+        assert targets.shape[1] == q_values_batch.shape[1] - 1
+        targets = targets.reshape(-1)
+
         state_batch = TextMemory(
                 item_ids=None,
                 available_ids=None,
-                available_mask=state_batch.available_mask[:-1],
+                available_mask=state_batch.available_mask,
                 text=None,
-                input_ids=state_batch.input_ids[:-1],
-                attention_mask=state_batch.attention_mask[:-1]
+                input_ids=state_batch.input_ids,
+                attention_mask=state_batch.attention_mask
             )
         
         action_batch = TextMemoryItem(
             index=None,
-            position=torch.tensor(action_batch.position[:-1], device=action_batch.input_ids.device, dtype=torch.float32), 
-            input_ids=action_batch.input_ids[:-1],
-            attention_mask=action_batch.attention_mask[:-1],
+            position=torch.tensor(action_batch.position, device=action_batch.input_ids.device, dtype=torch.float32), 
+            input_ids=action_batch.input_ids,
+            attention_mask=action_batch.attention_mask,
             text=None
         )
         

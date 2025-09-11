@@ -36,19 +36,29 @@ class ParallelTextEnv:
         memory = [e.reset() for e in self.text_envs]
         return memory, stack_memory(memory, self.state_tokenizer, max_length=self.action_embed_length)
     
-    def rollout(self, n, s_seq, agent, random):
+    def rollout(self, n, cur_s_seq, agent, random):
 
         a_embeds, a_embeds_target = self.get_extra_embeds(agent.critic.action_embed, agent.action_embed_target)
         env_index = list(range(len(self.text_envs)))
-        episodes = []
+        # episodes = []
         rewards = []
 
-        s_par = stack_memory(s_seq, self.state_tokenizer, max_length=self.action_embed_length)
+        s_par = stack_memory(cur_s_seq, self.state_tokenizer, max_length=self.action_embed_length)
         new_state_seq = []
 
         size = 0
 
-        while size < n:
+        # tmp_data = [[] for _ in range(len(self.text_envs))]
+        not_dones_seq = [[] for _ in range(len(self.text_envs))]
+        q_seq = [[] for _ in range(len(self.text_envs))]
+        r_seq = [[] for _ in range(len(self.text_envs))]
+        s_seq = [[] for _ in range(len(self.text_envs))]
+        a_seq = [[] for _ in range(len(self.text_envs))]
+        s_next_seq = [[] for _ in range(len(self.text_envs))]
+        r_sum = [0.0 for _ in range(len(self.text_envs))]
+
+
+        while size < n + len(self.text_envs):
 
             a_embeds = self.update_embeds(a_embeds, agent.critic.action_embed)
             a_embeds_target = self.update_embeds(a_embeds_target, agent.action_embed_target)
@@ -66,42 +76,43 @@ class ParallelTextEnv:
             q_values = q_values.cpu().numpy().reshape(-1)
             new_state_seq = []
 
-            for i, si, ai, qi, env in zip(env_index, s_seq, action, q_values, self.text_envs):
+            for i, si, ai, qi, env in zip(env_index, cur_s_seq, action, q_values, self.text_envs):
                 transition = env.step_and_maybe_reset(ai, self.action_tokenizer, agent.critic.action_embed, agent.action_embed_target)
                 transition = transition._replace(state=si, q_values=qi)
-                self.tmp_data[i].append(transition)
+                # tmp_data[i].append(transition)
                 new_state_seq.append(transition.new_state)
+                size += 1
+                
+                s_seq[i].append(transition.state)
+                a_seq[i].append(transition.action)
+                s_next_seq[i].append(transition.next_state)
+                r_seq[i].append(transition.reward)
+                not_dones_seq[i].append(1 - int(transition.done))
+                q_seq[i].append(qi)
+                r_sum[i] += transition.reward
+
                 if transition.done:
                     a_embeds[i], a_embeds_target[i] = transition.embeds
-                    episodes.append(self.tmp_data[i])
-                    size += len(self.tmp_data[i])
-                    self.tmp_data[i] = []
+                    rewards.append(r_sum[i])
+                    r_sum[i] = 0.0
+                    # episodes.append(self.tmp_data[i])
+                    # size += len(self.tmp_data[i])
+                    # self.tmp_data[i] = []
         
-            s_seq = new_state_seq
-            s_par = stack_memory(s_seq, self.state_tokenizer, max_length=self.action_embed_length)
+            cur_s_seq = new_state_seq
+            s_par = stack_memory(cur_s_seq, self.state_tokenizer, max_length=self.action_embed_length)
 
-        s_seq, a_seq, r_seq, s_next_seq, not_dones_seq, q_seq = [], [], [], [], [], [] 
         r_sum = 0.0
 
-        all_episodes = reduce(lambda e1, e2: e1 + e2, episodes)
-        # offset = 0 if len(all_episodes) <= n else np.random.randint(0, len(all_episodes) - n)
-
-        for tr in all_episodes:
-            s_seq.append(tr.state)
-            a_seq.append(tr.action)
-            s_next_seq.append(tr.next_state)
-            r_seq.append(tr.reward)
-            not_dones_seq.append(1 - int(tr.done))
-            q_seq.append(tr.q_values)
-            
-            r_sum += tr.reward
-            if tr.done:
-                rewards.append(r_sum)
-                r_sum = 0.0
+        s_seq = reduce(lambda e1, e2: e1 + e2, map(lambda e: e[:-1], s_seq))    
+        a_seq = reduce(lambda e1, e2: e1 + e2, map(lambda e: e[:-1], a_seq))    
+        s_next_seq = reduce(lambda e1, e2: e1 + e2, map(lambda e: e[:-1], s_next_seq))    
 
         s_stack = stack_memory(s_seq, self.state_tokenizer, max_length=self.action_embed_length)
         next_s_stack = stack_memory(s_next_seq, self.state_tokenizer, max_length=self.action_embed_length)
         a_stack = stack_actions(a_seq, self.action_tokenizer, max_length=self.action_embed_length)
+
+        # print("a", len(a_seq), "r", [len(ri) for ri in r_seq])
 
         return new_state_seq, rewards, TrainBatch(
             state=s_stack,

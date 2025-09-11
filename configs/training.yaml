@@ -3,7 +3,6 @@ defaults:
   - feedback: defaults
   - algo: pqn
   - logger: logging
-
   - _self_
 
 seed: 42
