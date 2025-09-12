@@ -30,8 +30,9 @@ def main():
     #example:
     #python eval_feedback.py +envs.task="qa1" +logfile=runs/Jul29_01-05-44_PQN_qa1_single-supporting-fact/eval_seed42_ns50.jsonl
     cfg = load_feedback_config('feedback/defaults.yaml')
+    print("use_api:", cfg.feedback.use_api)
     feedback_model: AnswerMetricFeedback = instantiate(cfg.feedback.exact_match)
-
+    print("use_api:", cfg.feedback.use_api)
     rewards = []
     out_f = open(cfg.output, "w") if "output" in cfg.keys() else None
     with open(cfg.logfile, "r") as f:

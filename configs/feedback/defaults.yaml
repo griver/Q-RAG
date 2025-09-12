@@ -1,6 +1,14 @@
 type: gt
 # type=gt # for ground truth from facts
 # type=babilong_em # for exact match from LLM generated answers with babilong prompts
+
+# to run babilong_em you need to start vllm server on a different set of GPU's:
+# CUDA_VISIBLE_DEVICES=1 vllm serve Qwen/Qwen3-4B --host 127.0.0.1 --port 10001 --api-key keykey --served-model-name feedback --gpu-memory-utilization 0.5 --max-model-len 2k --tensor-parallel-size 1
+# then change two parameters of this config:
+# feedback.model='feedback' feedback.use_api=true
+# keep in mind that if you access vllm via api vllm_config dict in this config will be ignored
+# TODO: add vllm_config in a different file to enable using it in `vllm serve ...`
+
 never_terminate: False
 
 ground_truth: &ground_truth
@@ -19,6 +27,7 @@ exact_match: &babi_exact_match
     api_key: ${feedback.api_key}
     max_at_same_time: ${feedback.max_at_same_time}
     prepare_messages_func: ${feedback.prompt_formatter}
+    disable_thinking: True #only for Qwen3 models, remove for other models
 
   metric: ${feedback.metric}
   completion_threshold: ${feedback.reward_scaling}
@@ -31,7 +40,7 @@ feedback_dict:
   #llm: *llm_judge:
   #  _target_: envs.text_env.RelativePositionProcessor
 
-use_api: false
+
 model: 'Qwen/Qwen3-1.7B'
 reward_scaling: 1.0
 
@@ -48,8 +57,10 @@ vllm_config:
   tensor_parallel_size: 1
   trust_remote_code: true
 
-api_base_url: null
-api_key: ""
+
+use_api: false
+api_base_url: "http://localhost:10001/v1"
+api_key: "keykey"
 max_at_same_time: 20
 
 metric:

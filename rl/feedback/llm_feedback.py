@@ -40,7 +40,7 @@ class LLMGenerator:
             api_key: str = '',
             max_at_same_time: int = 20,
             prepare_messages_func: Callable = None,
-
+            disable_thinking: bool = False, #set true only for Qwen3 models and when you want to disable thinking
     ):
         super().__init__()
         self._prepare_messages_func = prepare_messages_func
@@ -51,6 +51,7 @@ class LLMGenerator:
         self.answer_sampling_params = sampling_params
         self.answer_use_api = use_api
         self.answer_model_name = model_name
+        self.disable_thinking = disable_thinking
 
         if not use_api:
             if vllm_config:
@@ -90,11 +91,17 @@ class LLMGenerator:
         return [out.outputs[0].text.strip() for out in outputs]
 
     def _generate_answer_api(self, messages_batch: list[list[dict]]) -> list[str]:
+        if self.disable_thinking:
+            extra_body = {"chat_template_kwargs": {"enable_thinking": False}}
+        else:
+            extra_body = None
+
         async def _fetch(messages, sem: asyncio.Semaphore):
             async with sem:
                 resp = await self.answer_api_client.chat.completions.create(
                     model=self.answer_model_name,
                     messages=messages,
+                    extra_body=extra_body,
                     **self.answer_sampling_params
                 )
                 return resp.choices[0].message.content
@@ -118,13 +125,10 @@ class LLMGenerator:
             if self.answer_use_api:
                 prompts.append(msgs)
             else:
+                chat_template = dict(tokenize=False, add_generation_prompt=True)
+                if self.disable_thinking: chat_template["enable_thinking"] = False
                 #maybe chat_template_args should be specified in the __init__
-                text = self.answer_tok.apply_chat_template(
-                    msgs,
-                    tokenize=False,
-                    add_generation_prompt=True,
-                    enable_thinking=False,
-                )
+                text = self.answer_tok.apply_chat_template(msgs, **chat_template)
                 prompts.append(text)
         return prompts
 
