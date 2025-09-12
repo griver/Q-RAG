@@ -69,5 +69,46 @@ To evaluate all Babilong logs for different context length (1k-1m tokens) in a d
 
 ## In Progress
 
+### Feedback models
+Reward functions for the environments are selected via the `feedback.type` key,
+which maps to entries in `configs/feedback/defaults.yaml`. Override this value to
+choose a different feedback model:
+
+```bash
+python train_q_rag.py feedback.type=gt          # ground truth feedback
+python train_q_rag.py feedback.type=babilong_em # LLM exact‑match feedback
+```
+
+### Using AnswerMetricFeedback
+The `babilong_em` option relies on `rl.feedback.AnswerMetricFeedback` to score
+answers produced by an external LLM. Start a [vLLM](https://github.com/vllm-project/vllm)
+server before launching training:
+
+```bash
+CUDA_VISIBLE_DEVICES=1 vllm serve Qwen/Qwen3-4B \
+  --host 127.0.0.1 --port 10001 --api-key keykey \
+  --served-model-name feedback \
+  --gpu-memory-utilization 0.5 --max-model-len 2k \
+  --tensor-parallel-size 1
+```
+
+Run training or evaluation with the API-enabled feedback model:
+
+```bash
+python train_q_rag.py feedback.type=babilong_em \
+  feedback.model=feedback feedback.use_api=true ...
+```
+
+All parameters in `configs/feedback/defaults.yaml`, such as sampling settings or
+the served model name, can be modified directly in the file or overridden on the
+CLI as shown above.
+
+**🟥 Problems:**
+The `configs/feedback/defaults.yaml` file defines a `vllm_config` dictionary that
+is only used when launching vLLM in the same process (i.e. `feedback.use_api=False`), but this option doesn't work with training. 
+To use vllm with training you need to use `feedback.use_api=True` and 
+`vllm serve`. But in this case `vllm_config` is ignored; pass the same options as command
+line flags to `vllm serve` instead.
+
 
 
