@@ -1,5 +1,22 @@
 # Multi-Step Retrieval via Reinforcement Learning 
 
+## Installation
+
+Create and activate a conda environment:
+
+```bash
+conda create -n qrag python=3.12 -y
+conda activate qrag
+```
+
+Upgrade pip and install the Python dependencies:
+
+```bash
+python -m pip install -U pip wheel
+pip install vllm # pulls in compatible versions of PyTorch, Transformers, Triton, etc.
+pip hydra-core tensorboard rotary-embedding-torch pandas nltk sortedcontainers accelerate datasets
+```
+
 
 ## Training
 To train Contriever Embedder with Q-RAG on Babilong see `train_pqn.py`. 
