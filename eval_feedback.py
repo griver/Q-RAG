@@ -1,70 +1,41 @@
 import argparse
+import sys
+import os
 import json
 from tqdm import tqdm
+from omegaconf import OmegaConf
+from hydra.utils import instantiate
+from hydra import compose, initialize
 
 from rl.feedback.llm_feedback import AnswerMetricFeedback
 from prompts_and_metrics.babilong import (
-    DEFAULT_PROMPTS,
-    TEMPLATE,
-    get_formatted_input,
-    compute_exact_match,
-    gen_f1_metric,
+    BabilongPromptFormatter,
+    BabilongExactMatch,
+    BabilongF1,
 )
 
 
-from eval_llm import prepare_messages
+def load_feedback_config(name):
+    with initialize(version_base="1.3", config_path="./configs"):
+        feedback_cfg = compose(
+            config_name=name,
+            overrides=sys.argv[1:]
+        )
+
+    OmegaConf.resolve(feedback_cfg)
+    return feedback_cfg
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Evaluate retrieval logs using ExactMatchFeedback")
-    parser.add_argument("logfile", help="Path to JSON lines file with retrieval results")
-    parser.add_argument("--answer_model_name", required=True, help="Model name for answer generation")
-    parser.add_argument("--use_api", action="store_true", help="Use API instead of local vLLM")
-    parser.add_argument("--api_base_url", default=None, help="Base URL for the API")
-    parser.add_argument("--api_key", default="", help="API key for the model provider")
-    parser.add_argument("--max_tokens", type=int, default=32, help="Maximum tokens to generate")
-    parser.add_argument("--gpu_util", type=float, default=0.8, help="GPU memory utilization for vLLM")
-    parser.add_argument("--max_at_same_time", type=int, default=20, help="Max concurrent API requests")
-    parser.add_argument("--output", default=None, help="Optional path to write per-sample rewards")
-    args = parser.parse_args()
-    args.babi_task = 'qa1'
-
-    prompt_cfg = {
-        "instruction": DEFAULT_PROMPTS[args.babi_task]["instruction"],
-        "examples": DEFAULT_PROMPTS[args.babi_task]["examples"],
-        "post_prompt": DEFAULT_PROMPTS[args.babi_task]["post_prompt"],
-        "template": TEMPLATE,
-    }
-
-    vllm_config = {
-        'gpu_memory_utilization': args.gpu_util,
-        'max_model_len': 2048,
-        'dtype': 'bfloat16',  # new values start here
-        'quantization': None,
-        'tensor_parallel_size': 1,
-        'trust_remote_code': True,
-    }
-    sampling_params = {
-        'max_tokens': args.max_tokens,
-        'temperature': 0.0,
-        'top_p': 0.95
-    }
-
-    feedback_model = AnswerMetricFeedback(
-        use_api=args.use_api,
-        answer_model_name=args.answer_model_name,
-        sampling_params=sampling_params,
-        vllm_config=vllm_config,
-        api_base_url=args.api_base_url,
-        api_key=args.api_key,
-        max_at_same_time=args.max_at_same_time,
-        metric=compute_exact_match,
-        prepare_messages_func= lambda q, facts: prepare_messages(q, facts, prompt_cfg, prompt_cfg['template'])
-    )
-
+    #example:
+    #python eval_feedback.py +envs.task="qa1" +logfile=runs/Jul29_01-05-44_PQN_qa1_single-supporting-fact/eval_seed42_ns50.jsonl
+    cfg = load_feedback_config('feedback/defaults.yaml')
+    print("use_api:", cfg.feedback.use_api)
+    feedback_model: AnswerMetricFeedback = instantiate(cfg.feedback.exact_match)
+    print("use_api:", cfg.feedback.use_api)
     rewards = []
-    out_f = open(args.output, "w") if args.output else None
-    with open(args.logfile, "r") as f:
+    out_f = open(cfg.output, "w") if "output" in cfg.keys() else None
+    with open(cfg.logfile, "r") as f:
         lines = [ln for ln in f if ln.strip()]
 
     for line in tqdm(lines, desc="Feedback eval", ncols=80):

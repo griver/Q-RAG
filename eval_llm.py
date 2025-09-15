@@ -10,12 +10,14 @@ import os
 os.environ["VLLM_CONFIGURE_LOGGING"] = "0"
 
 from prompts_and_metrics.babilong import (
-    DEFAULT_PROMPTS,
-    TEMPLATE,
-    get_formatted_input,
-    compute_exact_match,
-    gen_f1_metric,
+    #DEFAULT_PROMPTS,
+    #TEMPLATE,
+    #get_formatted_input,
+    BabilongExactMatch,
+    BabilongF1,
+    BabilongPromptFormatter,
 )
+
 
 def save_final_scores(results_path: str, ns_key: str, f1: float, em: float) -> None:
     """Save F1 and EM scores under the provided key into results file."""
@@ -33,27 +35,25 @@ def save_final_scores(results_path: str, ns_key: str, f1: float, em: float) -> N
     with open(results_path, "w") as f:
         json.dump(results, f, ensure_ascii=False, indent=2)
 
-
-
-def prepare_messages(question: str, facts: List[str], prompt_cfg: dict, user_template: str):
-    """Create chat messages for the language model."""
-    str_of_facts = " ".join(facts)
-    input_text = get_formatted_input(
-        str_of_facts,
-        question,
-        prompt_cfg["examples"],
-        prompt_cfg["instruction"],
-        prompt_cfg["post_prompt"],
-        template=user_template,
-    )
-    messages = [
-        {
-            "role": "system",
-            "content": "Your are an AI assistant, your job is to answer questions given to you by the user.",
-        },
-        {"role": "user", "content": input_text},
-    ]
-    return messages
+# def prepare_messages(question: str, facts: List[str], prompt_cfg: dict, user_template: str):
+#     """Create chat messages for the language model."""
+#     str_of_facts = " ".join(facts)
+#     input_text = get_formatted_input(
+#         str_of_facts,
+#         question,
+#         prompt_cfg["examples"],
+#         prompt_cfg["instruction"],
+#         prompt_cfg["post_prompt"],
+#         template=user_template,
+#     )
+#     messages = [
+#         {
+#             "role": "system",
+#             "content": "Your are an AI assistant, your job is to answer questions given to you by the user.",
+#         },
+#         {"role": "user", "content": input_text},
+#     ]
+#     return messages
 
 
 def main():
@@ -74,13 +74,16 @@ def main():
         chat_template_kwargs['enable_thinking'] = args.think
         print(f'set enable_thinking = {args.think} for {args.llm_name}')
     
-    prompt_cfg = {
-        "instruction": DEFAULT_PROMPTS[args.babi_task]["instruction"],
-        "examples": DEFAULT_PROMPTS[args.babi_task]["examples"],
-        "post_prompt": DEFAULT_PROMPTS[args.babi_task]["post_prompt"],
-        "template": TEMPLATE,
-    }
-    compute_f1 = gen_f1_metric(args.babi_task)
+    # prompt_cfg = {
+    #     "instruction": DEFAULT_PROMPTS[args.babi_task]["instruction"],
+    #     "examples": DEFAULT_PROMPTS[args.babi_task]["examples"],
+    #     "post_prompt": DEFAULT_PROMPTS[args.babi_task]["post_prompt"],
+    #     "template": TEMPLATE,
+    # }
+    f1_metric = BabilongF1(args.babi_task)
+    em_metric = BabilongExactMatch()
+    prepare_messages = BabilongPromptFormatter(args.babi_task)
+
     vllm_config = {
         'gpu_memory_utilization': args.gpu_util,
         'max_model_len': 2048,
@@ -122,7 +125,8 @@ def main():
             facts = item.get("pred_text", [])
             facts_sorted = [f for idx, f in sorted(zip(facts_idx, facts))]
 
-            messages = prepare_messages(question, facts_sorted, prompt_cfg, prompt_cfg["template"])
+            #messages = prepare_messages(question, facts_sorted, prompt_cfg, prompt_cfg["template"])
+            messages = prepare_messages(question, facts_sorted)
             prompt = llm.get_tokenizer().apply_chat_template(messages, **chat_template_kwargs)
             #print('Messages:', messages)
             #print('Prompt:', prompt)
@@ -130,8 +134,10 @@ def main():
             outputs = llm.generate([prompt], sampling_params)
             prediction = outputs[0].outputs[0].text.strip()
 
-            ans_f1 = compute_f1(prediction, answer)
-            ans_em = compute_exact_match(prediction, answer)
+            ans_f1 = f1_metric(prediction, answer)
+            ans_em = em_metric(prediction, answer)
+            # ans_f1 = compute_f1(prediction, answer)
+            # ans_em = compute_exact_match(prediction, answer)
 
             all_f1.append(ans_f1)
             all_em.append(ans_em)

@@ -1,5 +1,6 @@
 import re
 import string
+from .answer_metric import AnswerMetric
 
 check_instruction_prompt = """You are a verification system.
 You are provided with QUESTION, TRUE ANSWER on this QUESTION and GENERATED ANSWER.
@@ -59,38 +60,77 @@ def normalize_answer(s: str) -> str:
     return white_space_fix(remove_articles(remove_punc(lower(s.strip()))))
 
 
-def compute_exact_match(prediction, target):
-    target, prediction = normalize_answer(target), normalize_answer(prediction)
-    return int(target == prediction)
+class GeneralQAExactMatch(AnswerMetric):
+
+    def __call__(self, prediction, target):
+        target, prediction = normalize_answer(target), normalize_answer(prediction)
+        return float(target == prediction)
 
 
-def recall(prediction, target):
-    target, prediction = normalize_answer(target).split(), normalize_answer(prediction).split()
-    len_true = len(target)
-    len_good = 0
-    for word in prediction:
-        if word in target:
-            len_good += 1
-            target.remove(word)
-    return len_good / len_true if len_true > 0 else 1
+class GeneralQAF1(AnswerMetric):
+
+    @staticmethod
+    def recall(prediction, target):
+        target, prediction = normalize_answer(target).split(), normalize_answer(prediction).split()
+        len_true = len(target)
+        len_good = 0
+        for word in prediction:
+            if word in target:
+                len_good += 1
+                target.remove(word)
+        return len_good / len_true if len_true > 0 else 1
+
+    @staticmethod
+    def precision(prediction, target):
+        target, prediction = normalize_answer(target).split(), normalize_answer(prediction).split()
+        len_gen = len(prediction)
+        len_good = 0
+        for word in target:
+            if word in prediction:
+                len_good += 1
+                prediction.remove(word)
+        return len_good / len_gen if len_gen > 0 else 1
+
+    def __call__(self, prediction, target):
+        prec = self.precision(prediction, target)
+        rec = self.recall(prediction, target)
+        if (prec + rec) == 0.:
+            return 0.0
+
+        return (2.0 * prec * rec) / (prec + rec)
+
+# def compute_exact_match(prediction, target):
+#     target, prediction = normalize_answer(target), normalize_answer(prediction)
+#     return int(target == prediction)
 
 
-def precision(prediction, target):
-    target, prediction = normalize_answer(target).split(), normalize_answer(prediction).split()
-    len_gen = len(prediction)
-    len_good = 0
-    for word in target:
-        if word in prediction:
-            len_good += 1
-            prediction.remove(word)
-    return len_good / len_gen if len_gen > 0 else 1
-
-
-def compute_f1(prediction, target):
-    prec = precision(prediction, target)
-    rec = recall(prediction, target)
-    if (prec + rec) == 0.:
-        return 0.
-
-    f1 = (2. * prec * rec) / (prec + rec)
-    return f1
+# def recall(prediction, target):
+#     target, prediction = normalize_answer(target).split(), normalize_answer(prediction).split()
+#     len_true = len(target)
+#     len_good = 0
+#     for word in prediction:
+#         if word in target:
+#             len_good += 1
+#             target.remove(word)
+#     return len_good / len_true if len_true > 0 else 1
+#
+#
+# def precision(prediction, target):
+#     target, prediction = normalize_answer(target).split(), normalize_answer(prediction).split()
+#     len_gen = len(prediction)
+#     len_good = 0
+#     for word in target:
+#         if word in prediction:
+#             len_good += 1
+#             prediction.remove(word)
+#     return len_good / len_gen if len_gen > 0 else 1
+#
+#
+# def compute_f1(prediction, target):
+#     prec = precision(prediction, target)
+#     rec = recall(prediction, target)
+#     if (prec + rec) == 0.:
+#         return 0.
+#
+#     f1 = (2. * prec * rec) / (prec + rec)
+#     return f1

@@ -1,0 +1,71 @@
+type: gt
+# type=gt # for ground truth from facts
+# type=babilong_em # for exact match from LLM generated answers with babilong prompts
+
+# to run babilong_em you need to start vllm server on a different set of GPU's:
+# CUDA_VISIBLE_DEVICES=1 vllm serve Qwen/Qwen3-4B --host 127.0.0.1 --port 10001 --api-key keykey --served-model-name feedback --gpu-memory-utilization 0.5 --max-model-len 2k --tensor-parallel-size 1
+# then change two parameters of this config:
+# feedback.model='feedback' feedback.use_api=true
+# keep in mind that if you access vllm via api vllm_config dict in this config will be ignored
+# TODO: add vllm_config in a different file to enable using it in `vllm serve ...`
+
+never_terminate: False
+
+ground_truth: &ground_truth
+  _target_: rl.feedback.GroundTruthFeedback
+  penalize_extra_steps: False
+
+exact_match: &babi_exact_match
+  _target_: rl.feedback.AnswerMetricFeedback
+  llm_generator:
+    _target_: rl.feedback.LLMGenerator
+    use_api: ${feedback.use_api}
+    model_name: ${feedback.model}
+    sampling_params: ${feedback.sampling_params}
+    vllm_config: ${feedback.vllm_config}
+    api_base_url: ${feedback.api_base_url}
+    api_key: ${feedback.api_key}
+    max_at_same_time: ${feedback.max_at_same_time}
+    prepare_messages_func: ${feedback.prompt_formatter}
+    disable_thinking: True #only for Qwen3 models, remove for other models
+
+  metric: ${feedback.metric}
+  completion_threshold: ${feedback.reward_scaling}
+  reward_scaling: ${feedback.reward_scaling}
+  never_terminate: ${feedback.never_terminate}
+
+feedback_dict:
+  gt: *ground_truth
+  babilong_em: *babi_exact_match
+  #llm: *llm_judge:
+  #  _target_: envs.text_env.RelativePositionProcessor
+
+
+model: 'Qwen/Qwen3-1.7B'
+reward_scaling: 1.0
+
+sampling_params:
+  max_tokens: 32
+  temperature: 0.0
+  top_p: 0.95
+
+vllm_config:
+  gpu_memory_utilization: 0.4
+  max_model_len: 2048
+  dtype: bfloat16
+  quantization: null
+  tensor_parallel_size: 1
+  trust_remote_code: true
+
+
+use_api: false
+api_base_url: "http://localhost:10001/v1"
+api_key: "keykey"
+max_at_same_time: 20
+
+metric:
+  _target_: prompts_and_metrics.babilong.BabilongExactMatch
+
+prompt_formatter:
+  _target_: prompts_and_metrics.babilong.BabilongPromptFormatter
+  babi_task: ${envs.task}
