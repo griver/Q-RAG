@@ -97,6 +97,8 @@ class QAEnv(TextEnv):
         self.references_idx = sample.get('sf_idx')
         self.references = [self.sentences[i] for i in self.references_idx]
 
+        print(len(self.sentences), self.references_idx)
+
     def _make_obs_and_info(self):
         """Right now this function is used only to prepare input for a feedback model"""
         pred_idx = [int(i) for i in self.memory.item_ids]
