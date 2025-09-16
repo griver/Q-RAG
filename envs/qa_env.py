@@ -97,8 +97,6 @@ class QAEnv(TextEnv):
         self.references_idx = sample.get('sf_idx')
         self.references = [self.sentences[i] for i in self.references_idx]
 
-        print(len(self.sentences), self.references_idx)
-
     def _make_obs_and_info(self):
         """Right now this function is used only to prepare input for a feedback model"""
         pred_idx = [int(i) for i in self.memory.item_ids]
@@ -112,6 +110,7 @@ class QAEnv(TextEnv):
         info = {
             'sf_idx': self.references_idx,
             'sf_chunks': self.references,
+            "answer": self.answer
         }
         return obs, info
 
@@ -148,6 +147,7 @@ class QAEnv(TextEnv):
         # r = self._reward(action)
         # if r > 1e-5:
         #     done = True
+
         fb = self.feedback_model.get_feedback(fb_obs, fb_info, truncated)
         return text_memory, text_item, fb['reward'], fb['terminated'] or truncated
 

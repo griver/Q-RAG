@@ -585,7 +585,10 @@ class BabilongExactMatch(AnswerMetric):
 
     def __call__(self, prediction, target):
         "Works for QA1-QA5 and every task with single answer."
-        prediction = prediction.strip(" .").split()[-1]
+        parts = prediction.strip(" .").split()
+        if parts:  
+            prediction = parts[-1]  
+        
         return prediction.lower() == target.strip().lower()
 
 
