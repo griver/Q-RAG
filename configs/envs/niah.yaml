@@ -1,6 +1,6 @@
-max_steps: 3
-task: "niah"
-data_path: "/home/jovyan/nazar/RULER/s_niah_3_16k/niah_single_3"
+max_steps: 5
+task: "mq_niah"
+data_path: "/home/jovyan/nazar/RULER/mq_niah_4k/niah_multiquery"
 sort_by_index: False
 
 positions_processor: none
@@ -19,16 +19,16 @@ positions_processor_dict:
     _target_: envs.text_env.RelativePositionProcessor
     step_size: 20
 
-train_dataset: &train_dataset
+train_dataset: 
   _target_: envs.NIAH
   path: ${envs.data_path}
   split: 'train'
   seed: ${seed}
 
-test_dataset: &test_dataset
+test_dataset: 
   _target_: envs.NIAH
   path: ${envs.data_path}
-  split: 'eval'
+  split: 'test4k'
   seed: ${seed}
 
 # Core Environment Configuration
@@ -42,7 +42,7 @@ env:
   feedback_model:
     _target_: rl.feedback.GroundTruthFeedback
     penalize_extra_steps: True
-  dataset: *train_dataset
+  dataset: ${envs.train_dataset}
    
 test_env:
   _target_: envs.qa_env.QAEnv
@@ -54,4 +54,4 @@ test_env:
   feedback_model:
     _target_: rl.feedback.GroundTruthFeedback
     penalize_extra_steps: True
-  dataset: *test_dataset
+  dataset: ${envs.test_dataset}

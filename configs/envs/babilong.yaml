@@ -23,7 +23,7 @@ positions_processor_dict:
     step_size: 20
 
 
-train_dataset: &train_dataset
+train_dataset: 
   _target_: envs.RetrievalBabiLong
   num_sentences: ${envs.num_sentences}
 
@@ -37,7 +37,7 @@ train_dataset: &train_dataset
       _target_: datasets.load_from_disk
       dataset_path: ${envs.noise_train_path}
 
-test_dataset: &test_dataset
+test_dataset: 
   _target_: envs.RetrievalBabiLong
   num_sentences: ${envs.num_sentences}
 
@@ -67,7 +67,7 @@ env:
   # Dataset Configuration
   dataset:
     _target_: envs.QADatasetAdapter
-    dataset: *train_dataset
+    dataset: ${envs.train_dataset}
 
 
 test_env:
@@ -84,5 +84,5 @@ test_env:
   #  _target_: envs.qa_env.PositionalGTReward
   dataset:
     _target_: envs.QADatasetAdapter
-    dataset: *test_dataset
+    dataset: ${envs.test_dataset}
 

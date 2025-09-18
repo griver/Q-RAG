@@ -55,7 +55,7 @@ action_embed_dict:
 pqn:
   _target_: rl.pqn.PQN
   
-  state_embed: &bert_predictor
+  state_embed: 
     _target_: rl.bert_predictor.BertPredictor
     bert:
       _target_: transformers.AutoModel.from_pretrained
@@ -73,7 +73,7 @@ pqn:
 
   action_embed: ${algo.action_embed_dict.${envs.positions_processor}}
   
-  state_embed_target: *bert_predictor
+  state_embed_target: ${algo.pqn.state_embed}
   action_embed_target: ${algo.action_embed_dict.${envs.positions_processor}}
 
   hyperparams:

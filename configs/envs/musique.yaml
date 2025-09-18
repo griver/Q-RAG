@@ -19,13 +19,13 @@ positions_processor_dict:
     _target_: envs.text_env.RelativePositionProcessor
     step_size: 20
 
-train_dataset: &train_dataset
+train_dataset: 
   _target_: envs.RetrievalMusique
   path: ${envs.data_path}
   split: 'train'
   seed: ${seed}
 
-test_dataset: &test_dataset
+test_dataset: 
   _target_: envs.RetrievalMusique
   path: ${envs.data_path}
   split: 'eval'
@@ -48,7 +48,7 @@ env:
   # Dataset Configuration
   dataset:
     _target_: envs.QADatasetAdapter
-    dataset: *train_dataset
+    dataset: ${envs.train_dataset}
 
 
 test_env:
@@ -65,4 +65,4 @@ test_env:
 #    _target_: envs.qa_env.PositionalGTReward
   dataset:
     _target_: envs.QADatasetAdapter
-    dataset: *test_dataset
+    dataset: ${envs.test_dataset}

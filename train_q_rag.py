@@ -138,7 +138,7 @@ for it in progress_bar:
     
     agent.train()
     states_list, rewards, train_batch = parallel_env.rollout(cfg.batch_size, states_list, agent, random=(step < 2 * cfg.learning_start))
-    step += train_batch.reward.shape[0]
+    step += np.prod(train_batch.reward.shape)
     train_rewards.extend(rewards)
 
     qf_loss = agent.update(
