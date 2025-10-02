@@ -12,7 +12,7 @@ from collections import deque
 
 
 def load_sentence_embedder():
-    contriever_path = "/home/griver/projects/ml/nlp/contriever"
+    contriever_path = "../contriever"
     if contriever_path not in sys.path:
        sys.path.append(contriever_path)
     from src.contriever import Contriever

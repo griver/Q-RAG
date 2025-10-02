@@ -16,7 +16,7 @@ SEED="$3"
 NUM_SENTENCES_LIST=(50 160 1200 4600 40000) # 400000)
 
 PYTHON="python3" #"$HOME/.mlspace/envs/msr/bin/python3"
-SCRIPT="eval_and_log_pqn.py"
+SCRIPT="eval_retriever.py"
 
 for N in "${NUM_SENTENCES_LIST[@]}"; do
   echo "=== Запуск с envs.num_sentences=${N} ==="
