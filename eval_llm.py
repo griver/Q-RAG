@@ -129,7 +129,7 @@ def main():
             messages = prepare_messages(question, facts_sorted)
             prompt = llm.get_tokenizer().apply_chat_template(messages, **chat_template_kwargs)
             #print('Messages:', messages)
-            #print('Prompt:', prompt)
+            print('Prompt:', prompt)
             #break
             outputs = llm.generate([prompt], sampling_params)
             prediction = outputs[0].outputs[0].text.strip()

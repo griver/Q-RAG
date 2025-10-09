@@ -60,6 +60,34 @@ DEFAULT_PROMPTS = {
             'Always return your answer in the following format: '
             'The most recent location of ’person’ is ’location’. Do not write anything else after that.'
     },
+    'niah': {
+        'instruction':
+            'I will give you context with a special magic uuid hidden within the context'
+            'and a question. You need to answer the question based only on the information from the context. ',
+        'examples':
+            '<example>\n'
+            'One of the special magic uuids for late-somebody is: a6cdae3c-6d13-4705-a79f-91ab1b4909b6. '
+            'What is the special magic uuid for late-somebody mentioned in the provided text?\n'
+            'The special magic uuid mentioned in the provided text is a6cdae3c-6d13-4705-a79f-91ab1b4909b6.\n'
+            '</example>\n\n',
+        'post_prompt':
+            'Always return your answer in the following format: '
+            'The special magic uuid mentioned in the provided text is ’uuid’. Do not write anything else after that.'
+    },
+    'niahmv': {
+        'instruction':
+            'I will give you context with special magic numbers hidden within the context'
+            'and a question. You need to answer the question based only on the information from the context. ',
+        'examples':
+            '<example>\n'
+            'One of the special magic numbers for elated-environment is: 1155477. One of the special magic numbers for elated-environment is: 1628578. One of the special magic numbers for elated-environment is: 6006190. One of the special magic numbers for elated-environment is: 5856449.'
+            'What are all the special magic numbers for elated-environment mentioned in the provided text?\n'
+            'The magic numbers are 5856449,1628578,1155477,6006190.\n'
+            '</example>',
+        'post_prompt':
+            'Always return your answer in the following format: '
+            'The magic numbers are n1,n2,n3,n4. Split the numbers by coma(,) sumbol only without extra spases or and wird. Do not write anything else after that.'
+    },
     'qa2': {
         'instruction':
             'I give you context with the facts about locations and actions of different persons '
@@ -524,7 +552,10 @@ DEFAULT_PROMPTS = {
 }
 
 
-TASK_LABELS = {'qa1': ['bathroom', 'bedroom', 'garden', 'hallway', 'kitchen', 'office'],
+TASK_LABELS = {
+ 'niah': ['uuid'],
+ 'niahmv': ['numbers'],
+ 'qa1': ['bathroom', 'bedroom', 'garden', 'hallway', 'kitchen', 'office'],
  'qa2': ['bathroom', 'bedroom', 'garden', 'hallway', 'kitchen', 'office'],
  'qa3': ['bathroom', 'bedroom', 'garden', 'hallway', 'kitchen', 'office'],
  'qa4': ['bathroom', 'bedroom', 'garden', 'hallway', 'kitchen', 'office'],
@@ -588,6 +619,11 @@ class BabilongExactMatch(AnswerMetric):
         parts = prediction.strip(" .").split()
         if parts:  
             prediction = parts[-1]  
+
+        comas = prediction.split(",")
+        if comas:
+           target = target.split(",") 
+           return set(comas) == set(target)
         
         return prediction.lower() == target.strip().lower()
 

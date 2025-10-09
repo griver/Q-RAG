@@ -18,6 +18,23 @@ TrainBatch = namedtuple("TrainBatch", [
 ])
 
 
+def compare_module_params(module1, module2, rtol=1e-4, atol=1e-5):
+    """
+    Compare parameters of two modules.
+    Returns True if all parameters are approximately equal.
+    """
+    for (name1, param1), (name2, param2) in zip(module1.named_parameters(), module2.named_parameters()):
+        if name1 != name2:
+            print(f"Parameter name mismatch: {name1} vs {name2}")
+            return False
+        
+        if not torch.allclose(param1, param2, rtol=rtol, atol=atol):
+            print(f"Parameter {name1} differs")
+            return False
+    
+    return True
+
+
 class ParallelTextEnv:
 
     def __init__(self, text_envs: List[TextEnv], 
@@ -70,6 +87,9 @@ class ParallelTextEnv:
             #  Please consider how this change will affect two lines below.
             embeds_pt = custom_pad_sequence(a_embeds_pos, padding_value=0.0, batch_first=True, pad_to_power_2=False)
             embeds_target_pt = custom_pad_sequence(a_embeds_target_pos, padding_value=0.0, batch_first=True, pad_to_power_2=False)
+
+            # are_equal = torch.allclose(embeds_pt, embeds_target_pt, rtol=1e-5, atol=1e-8)
+            # print(compare_module_params(agent.critic.state_embed, agent.v_net_target.state_embed))
         
             action, _, q_values  = agent.select_action_batch(s_par, embeds_pt, embeds_target_pt, random=random)
             action = action.cpu().numpy().reshape(-1)

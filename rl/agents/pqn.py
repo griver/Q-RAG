@@ -35,6 +35,7 @@ class PQN(object):
         self.Lambda = config.pqn.hyperparams.Lambda
         self.tau = config.pqn.hyperparams.tau
         self.start_lr = config.pqn.optimizer.lr
+        print("tau", self.tau)
         # ===new===
         self.max_grad_norm = config.pqn.hyperparams.max_grad_norm
         self.accumulate_grads = config.pqn.hyperparams.accumulate_grads
