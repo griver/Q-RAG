@@ -13,7 +13,7 @@ never_terminate: False
 
 ground_truth: 
   _target_: rl.feedback.GroundTruthFeedback
-  penalize_extra_steps: False
+  penalize_extra_steps: True
 
 exact_match: 
   _target_: rl.feedback.AnswerMetricFeedback

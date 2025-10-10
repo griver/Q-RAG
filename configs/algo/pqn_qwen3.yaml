@@ -59,11 +59,12 @@ pqn:
   hyperparams:
     gamma: 0.99
     alpha: 0.005
-    Lambda: 0.6
+    Lambda: 0.65
     tau: 0.02
     max_grad_norm: 2.
     accumulate_grads: ${accumulate_grads}
     action_embed_length: ${max_action_length}
+    max_action_length_in_memory: ${max_action_length_in_memory}
 
   optimizer:
     _target_: torch.optim.AdamW

@@ -1,6 +1,6 @@
 max_steps: 6
 num_sentences: 100
-task: "qa2_two-supporting-facts"  #"qa2_two-supporting-facts" #"qa1_single-supporting-fact"
+task: "qa3_three-supporting-facts"  #"qa2_two-supporting-facts" #"qa1_single-supporting-fact"
 noise_train_path: "../datasets/babilong/pg19-with-sentences/train"
 noise_test_path: "../datasets/babilong/pg19-with-sentences/test"
 facts_train_path: "../datasets/babilong/tasks_1-20_v1-2/en-10k/${envs.task}_train.txt"
@@ -56,6 +56,7 @@ env:
   _target_: envs.qa_env.QAEnv
   max_steps: ${envs.max_steps}
   action_embed_length: ${max_action_length}
+  max_action_length_in_memory: ${max_action_length_in_memory}
   separator: " [SEP] "        
   sort_by_index: True
   positions_processor: ${envs.positions_processor_dict.${envs.positions_processor}}
@@ -74,12 +75,13 @@ test_env:
   _target_: envs.qa_env.QAEnv
   max_steps: ${envs.env.max_steps}
   action_embed_length: ${max_action_length}
+  max_action_length_in_memory: ${max_action_length_in_memory}
   separator: ${envs.env.separator}       
   sort_by_index: ${envs.env.sort_by_index}
   positions_processor: ${envs.env.positions_processor}
   feedback_model:
     _target_: rl.feedback.GroundTruthFeedback
-    penalize_extra_steps: False
+    penalize_extra_steps: True
   #reward_model:
   #  _target_: envs.qa_env.PositionalGTReward
   dataset:

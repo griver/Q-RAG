@@ -492,7 +492,7 @@ class AnswerMetricFeedback(AFeedbackModel):
         pred_chunks = obs.get('pred_chunks', [])
         predicted_answer = self.llm.generate_answer(question, pred_chunks)
         true_answer = info.get('answer')
-        print("PRED", predicted_answer, "TRUR", true_answer)
+        # print("PRED", predicted_answer, "TRUR", true_answer)
         reward = self.score_answer_pred(predicted_answer, true_answer)
         if reward >= self.completion_threshold:
             self.completed = True

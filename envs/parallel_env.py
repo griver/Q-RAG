@@ -18,23 +18,6 @@ TrainBatch = namedtuple("TrainBatch", [
 ])
 
 
-def compare_module_params(module1, module2, rtol=1e-4, atol=1e-5):
-    """
-    Compare parameters of two modules.
-    Returns True if all parameters are approximately equal.
-    """
-    for (name1, param1), (name2, param2) in zip(module1.named_parameters(), module2.named_parameters()):
-        if name1 != name2:
-            print(f"Parameter name mismatch: {name1} vs {name2}")
-            return False
-        
-        if not torch.allclose(param1, param2, rtol=rtol, atol=atol):
-            print(f"Parameter {name1} differs")
-            return False
-    
-    return True
-
-
 class ParallelTextEnv:
 
     def __init__(self, text_envs: List[TextEnv], 
@@ -45,13 +28,14 @@ class ParallelTextEnv:
         self.state_tokenizer = state_tokenizer
         self.action_tokenizer = action_tokenizer
         self.action_embed_length = text_envs[0].action_embed_length
+        self.max_action_length_in_memory = text_envs[0].max_action_length_in_memory
 
         self.tmp_data = [[] for _ in range(len(self.text_envs))]
         # self.episodes = []
 
     def reset(self):
         memory = [e.reset() for e in self.text_envs]
-        return memory, stack_memory(memory, self.state_tokenizer, max_length=self.action_embed_length)
+        return memory, stack_memory(memory, self.state_tokenizer, max_length=self.max_action_length_in_memory)
     
     def rollout(self, n, cur_s_seq, agent, random):
 
@@ -60,7 +44,7 @@ class ParallelTextEnv:
         # episodes = []
         rewards = []
 
-        s_par = stack_memory(cur_s_seq, self.state_tokenizer, max_length=self.action_embed_length)
+        s_par = stack_memory(cur_s_seq, self.state_tokenizer, max_length=self.max_action_length_in_memory)
         new_state_seq = []
 
         size = 0
@@ -89,8 +73,7 @@ class ParallelTextEnv:
             embeds_target_pt = custom_pad_sequence(a_embeds_target_pos, padding_value=0.0, batch_first=True, pad_to_power_2=False)
 
             # are_equal = torch.allclose(embeds_pt, embeds_target_pt, rtol=1e-5, atol=1e-8)
-            # print(compare_module_params(agent.critic.state_embed, agent.v_net_target.state_embed))
-        
+            
             action, _, q_values  = agent.select_action_batch(s_par, embeds_pt, embeds_target_pt, random=random)
             action = action.cpu().numpy().reshape(-1)
             q_values = q_values.cpu().numpy().reshape(-1)
@@ -120,7 +103,7 @@ class ParallelTextEnv:
                     # self.tmp_data[i] = []
         
             cur_s_seq = new_state_seq
-            s_par = stack_memory(cur_s_seq, self.state_tokenizer, max_length=self.action_embed_length)
+            s_par = stack_memory(cur_s_seq, self.state_tokenizer, max_length=self.max_action_length_in_memory)
 
         r_sum = 0.0
 
@@ -128,8 +111,8 @@ class ParallelTextEnv:
         a_seq = reduce(lambda e1, e2: e1 + e2, map(lambda e: e[:-1], a_seq))    
         s_next_seq = reduce(lambda e1, e2: e1 + e2, map(lambda e: e[:-1], s_next_seq))    
 
-        s_stack = stack_memory(s_seq, self.state_tokenizer, max_length=self.action_embed_length)
-        next_s_stack = stack_memory(s_next_seq, self.state_tokenizer, max_length=self.action_embed_length)
+        s_stack = stack_memory(s_seq, self.state_tokenizer, max_length=self.max_action_length_in_memory)
+        next_s_stack = stack_memory(s_next_seq, self.state_tokenizer, max_length=self.max_action_length_in_memory)
         a_stack = stack_actions(a_seq, self.action_tokenizer, max_length=self.action_embed_length)
 
         # print("a", len(a_seq), "r", [len(ri) for ri in r_seq])

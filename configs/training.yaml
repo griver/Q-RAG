@@ -14,4 +14,5 @@ accumulate_grads: 2
 eval_interval: 100
 eval_episodes: 300
 envs_parallel: 4
-max_action_length: 64
+max_action_length: 256
+max_action_length_in_memory: 64
