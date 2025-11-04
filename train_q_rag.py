@@ -75,7 +75,8 @@ def set_all_seeds(seed):
 
 
 #cfg: DictConfig = load_config(name="training_qwen3.yaml")
-cfg: DictConfig = load_config(name="training.yaml")
+#cfg: DictConfig = load_config(name="training.yaml")
+cfg: DictConfig = load_config(name="training_gte_combined.yaml")
 
 writer: SummaryWriter = instantiate(cfg.logger.tensorboard)
 os.makedirs(cfg.logger.log_dir, exist_ok=True)
