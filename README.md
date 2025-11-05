@@ -40,9 +40,18 @@ Example – Babilong (for a single GPU with 16 GB):
 ```bash
 python train_q_rag.py envs.task=qa2_two-supporting-facts envs.num_sentences=100 batch_size=16 accumulate_grads=3
 ```
-Example – HotpotQA:
+Example. HotpotQA:
 ```bash
 python train_q_rag.py envs=hotpotqa max_action_length=140 envs.max_steps=3 batch_size=16 accumulate_grads=2 eval_episodes=100
+```
+Example. For training Q-RAG with GTE embedder on the combined dataset HotpotQA+Musique, modify `training.yaml` config file:
+* `algo: pqn_gte`
+* `- envs: combined`
+* `batch_size: 16` (for A100-80GB)
+`max_action_length` and `max_action_length_in_memory` may also need to be changed.
+Then run the training script:
+```bash
+python3 ./train_q_rag.py
 ```
 
 ## Testing
