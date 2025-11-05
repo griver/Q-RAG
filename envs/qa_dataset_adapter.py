@@ -1,4 +1,9 @@
 from torch.utils.data import Dataset
+import envs.chunker
+
+CHUNK_SIZE = 2000
+
+
 
 class QADatasetAdapter(Dataset):
     """
@@ -17,12 +22,8 @@ class QADatasetAdapter(Dataset):
 
     def __getitem__(self, index):
         sample = self.dataset[index]
-        question = sample["question"]
-        if question.endswith("?"):
-            question = question[:-1]
         sf_idx = []
         chunks_texts = []
-        sample_id = None
 
         if self.dataset_name == "combined":
             source = sample.get('source')
@@ -34,6 +35,8 @@ class QADatasetAdapter(Dataset):
         if source == 'hotpotqa':
             sp_title_set = set()
             sample_id = sample['_id']
+            question = sample["question"]
+            answer = sample["answer"]
             for sup in sample['supporting_facts']:
                 sp_title_set.add(sup[0])
             for idx, (title, sentences) in enumerate(sample['context']):
@@ -44,6 +47,8 @@ class QADatasetAdapter(Dataset):
 
         elif source == 'musique':
             sample_id = sample['id']
+            question = sample["question"]
+            answer = sample["answer"]
             for i, para in enumerate(sample['paragraphs']):
                 # if para['is_supporting']:
                 #     sf_idx.append(i)
@@ -54,16 +59,29 @@ class QADatasetAdapter(Dataset):
 
         elif source == 'babilong':
             sample_id = index
+            question = sample["question"]
+            answer = sample["answer"]
             chunks_texts = sample['chunks']
             sf_idx = list(sample['references_idx'])
+
+        elif source == 'longbench':
+            sample_id = sample["_id"]
+            question = sample["input"]
+            answer = sample["answers"][0]
+            chunks_texts = envs.chunker.chunks_split(sample["context"], chunk_size=CHUNK_SIZE)
+            #sf_idx = None
+            sf_idx.append(0)
+            #print("Chunks count:", len(chunks_texts))
 
         else:
             raise ValueError(f"Unsupported dataset/source: {source}")
 
+        if question.endswith("?"):  question = question[:-1]
+
         result = {
             'id': sample_id,
             'question': question,
-            'answer': sample["answer"],
+            'answer': answer, # sample["answer"],
             'chunks': chunks_texts,
             'sf_idx': sf_idx,
         }
