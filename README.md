@@ -46,12 +46,13 @@ python train_q_rag.py envs=hotpotqa max_action_length=140 envs.max_steps=3 batch
 ```
 Example. For training Q-RAG with GTE embedder on the combined dataset HotpotQA+Musique, modify `training.yaml` config file:
 * `algo: pqn_gte`
-* `- envs: combined`
-* `batch_size: 16` (for A100-80GB)
+* `envs: combined`
+* `batch_size: 16`  (for A100-80GB)
+
 `max_action_length` and `max_action_length_in_memory` may also need to be changed.
 Then run the training script:
 ```bash
-python3 ./train_q_rag.py
+python3 train_q_rag.py
 ```
 
 ## Testing
