@@ -14,7 +14,7 @@ Upgrade pip and install the Python dependencies:
 ```bash
 python -m pip install -U pip wheel
 pip install vllm # pulls in compatible versions of PyTorch, Transformers, Triton, etc.
-pip hydra-core tensorboard rotary-embedding-torch pandas nltk sortedcontainers accelerate datasets
+pip install hydra-core tensorboard rotary-embedding-torch pandas nltk sortedcontainers accelerate datasets
 ```
 
 
