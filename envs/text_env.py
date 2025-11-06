@@ -95,6 +95,7 @@ class TextEnv:
 
     separator: str
     action_embed_length: int
+    max_action_length_in_memory: int
     max_embedding_batch: int
     positions_processor: PositionProcessor
     sort_by_index: bool = True

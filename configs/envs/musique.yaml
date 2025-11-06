@@ -19,13 +19,13 @@ positions_processor_dict:
     _target_: envs.text_env.RelativePositionProcessor
     step_size: 20
 
-train_dataset: &train_dataset
+train_dataset: 
   _target_: envs.RetrievalMusique
   path: ${envs.data_path}
   split: 'train'
   seed: ${seed}
 
-test_dataset: &test_dataset
+test_dataset: 
   _target_: envs.RetrievalMusique
   path: ${envs.data_path}
   split: 'eval'
@@ -36,6 +36,7 @@ env:
   _target_: envs.qa_env.QAEnv
   max_steps: ${envs.max_steps}
   action_embed_length: ${max_action_length}
+  max_action_length_in_memory: ${max_action_length_in_memory}
   separator: " [SEP] "
   sort_by_index: ${envs.sort_by_index}
   positions_processor: ${envs.positions_processor_dict.${envs.positions_processor}}
@@ -48,13 +49,14 @@ env:
   # Dataset Configuration
   dataset:
     _target_: envs.QADatasetAdapter
-    dataset: *train_dataset
+    dataset: ${envs.train_dataset}
 
 
 test_env:
   _target_: envs.qa_env.QAEnv
   max_steps: ${envs.env.max_steps}
   action_embed_length: ${max_action_length}
+  max_action_length_in_memory: ${max_action_length_in_memory}
   separator: ${envs.env.separator}
   sort_by_index: ${envs.sort_by_index}
   positions_processor: ${envs.env.positions_processor}
@@ -65,4 +67,4 @@ test_env:
 #    _target_: envs.qa_env.PositionalGTReward
   dataset:
     _target_: envs.QADatasetAdapter
-    dataset: *test_dataset
+    dataset: ${envs.test_dataset}

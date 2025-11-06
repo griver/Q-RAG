@@ -1,14 +1,13 @@
-max_steps: 2
-task: "hotpotqa"
-data_path: "../datasets/hotpotqa/"
+task: "combined"
+dataset1_path: "/mnt/Datasets/Hotpotqa"
+dataset2_path: "/mnt/Datasets/Musique"
+max_steps: 6
 sort_by_index: False
 
 positions_processor: none
 
 positions_processor_dict:
   none:
-    #this choice allows to ignore positional embeddings
-    #but inside the environment we still need to enumerate chunks
     _target_: envs.text_env.AbsolutePositionProcessor
   absolute:
     _target_: envs.text_env.AbsolutePositionProcessor
@@ -19,19 +18,35 @@ positions_processor_dict:
     _target_: envs.text_env.RelativePositionProcessor
     step_size: 20
 
-train_dataset: 
-  _target_: envs.RetrievalHotPotQA
-  path: ${envs.data_path}
-  split: 'train'
-  seed: ${seed}
+train_dataset: &train_dataset
+  _target_: envs.RetrievalCombined
+  dataset1:
+    _target_: envs.RetrievalHotPotQA
+    path: ${envs.dataset1_path}
+    split: 'train'
+    seed: ${seed}
+  dataset2:
+    _target_: envs.RetrievalMusique
+    path: ${envs.dataset2_path}
+    split: 'train'
+    seed: ${seed}
+  shuffle: True
 
-test_dataset: 
-  _target_: envs.RetrievalHotPotQA
-  path: ${envs.data_path}
-  split: 'eval'
-  seed: ${seed}
+test_dataset: &test_dataset
+  _target_: envs.RetrievalCombined
+  dataset1:
+    _target_: envs.RetrievalHotPotQA
+    path: ${envs.dataset1_path}
+    split: 'eval'
+    seed: ${seed}
+  dataset2:
+    _target_: envs.RetrievalMusique
+    path: ${envs.dataset2_path}
+    split: 'eval'
+    seed: ${seed}
+  shuffle: False  # No shuffle for testing
 
-# Core Environment Configuration
+# Core environment configuration for training
 env:
   _target_: envs.qa_env.QAEnv
   max_steps: ${envs.max_steps}
@@ -39,17 +54,14 @@ env:
   max_action_length_in_memory: ${max_action_length_in_memory}
   separator: " [SEP] "
   sort_by_index: ${envs.sort_by_index}
-  positions_processor: ${envs.positions_processor_dict.${envs.positions_processor}}
-  feedback_model: ${feedback.feedback_dict.${feedback.type}}
-#  feedback_model:
-#    _target_: rl.feedback.GroundTruthFeedback
-#    penalize_extra_steps: False
-#  reward_model:
-#    _target_: envs.qa_env.PositionalGTReward
-  # Dataset Configuration
+  positions_processor:
+    _target_: envs.text_env.AbsolutePositionProcessor  # Simplified reference
+  feedback_model:
+    _target_: rl.feedback.GroundTruthFeedback
+    penalize_extra_steps: True
   dataset:
     _target_: envs.QADatasetAdapter
-    dataset: ${envs.train_dataset}
+    dataset: *train_dataset
 
 test_env:
   _target_: envs.qa_env.QAEnv
@@ -66,5 +78,4 @@ test_env:
 #    _target_: envs.qa_env.PositionalGTReward
   dataset:
     _target_: envs.QADatasetAdapter
-    dataset: ${envs.test_dataset}
-
+    dataset: *test_dataset

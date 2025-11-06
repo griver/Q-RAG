@@ -99,38 +99,38 @@ class GeneralQAF1(AnswerMetric):
 
         return (2.0 * prec * rec) / (prec + rec)
 
-# def compute_exact_match(prediction, target):
-#     target, prediction = normalize_answer(target), normalize_answer(prediction)
-#     return int(target == prediction)
+def compute_exact_match(prediction, target):
+    target, prediction = normalize_answer(target), normalize_answer(prediction)
+    return int(target == prediction)
 
 
-# def recall(prediction, target):
-#     target, prediction = normalize_answer(target).split(), normalize_answer(prediction).split()
-#     len_true = len(target)
-#     len_good = 0
-#     for word in prediction:
-#         if word in target:
-#             len_good += 1
-#             target.remove(word)
-#     return len_good / len_true if len_true > 0 else 1
-#
-#
-# def precision(prediction, target):
-#     target, prediction = normalize_answer(target).split(), normalize_answer(prediction).split()
-#     len_gen = len(prediction)
-#     len_good = 0
-#     for word in target:
-#         if word in prediction:
-#             len_good += 1
-#             prediction.remove(word)
-#     return len_good / len_gen if len_gen > 0 else 1
-#
-#
-# def compute_f1(prediction, target):
-#     prec = precision(prediction, target)
-#     rec = recall(prediction, target)
-#     if (prec + rec) == 0.:
-#         return 0.
-#
-#     f1 = (2. * prec * rec) / (prec + rec)
-#     return f1
+def recall(prediction, target):
+    target, prediction = normalize_answer(target).split(), normalize_answer(prediction).split()
+    len_true = len(target)
+    len_good = 0
+    for word in prediction:
+        if word in target:
+            len_good += 1
+            target.remove(word)
+    return len_good / len_true if len_true > 0 else 1
+
+
+def precision(prediction, target):
+    target, prediction = normalize_answer(target).split(), normalize_answer(prediction).split()
+    len_gen = len(prediction)
+    len_good = 0
+    for word in target:
+        if word in prediction:
+            len_good += 1
+            prediction.remove(word)
+    return len_good / len_gen if len_gen > 0 else 1
+
+
+def compute_f1(prediction, target):
+    prec = precision(prediction, target)
+    rec = recall(prediction, target)
+    if (prec + rec) == 0.:
+        return 0.
+
+    f1 = (2. * prec * rec) / (prec + rec)
+    return f1

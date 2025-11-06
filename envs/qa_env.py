@@ -50,6 +50,7 @@ class QAEnv(TextEnv):
                  max_steps: int,
                  positions_processor: PositionProcessor,
                  action_embed_length: int,
+                 max_action_length_in_memory: int,
                  feedback_model: AFeedbackModel,
                  #reward_model = GroundTruthReward(),
                  max_embedding_batch: int = 10000,
@@ -63,6 +64,7 @@ class QAEnv(TextEnv):
         self.max_steps = max_steps
         self.max_embedding_batch = max_embedding_batch
         self.action_embed_length = action_embed_length
+        self.max_action_length_in_memory = max_action_length_in_memory
         self.feedback_model = feedback_model
         #self.reward_model = reward_model
         self.positions_processor = positions_processor
@@ -82,6 +84,7 @@ class QAEnv(TextEnv):
             max_steps = self.max_steps,
             positions_processor = self.positions_processor,
             action_embed_length = self.action_embed_length,
+            max_action_length_in_memory = self.max_action_length_in_memory,
             feedback_model=self.feedback_model.copy(),
             #reward_model = self.reward_model,
             max_embedding_batch = self.max_embedding_batch,
@@ -110,6 +113,7 @@ class QAEnv(TextEnv):
         info = {
             'sf_idx': self.references_idx,
             'sf_chunks': self.references,
+            "answer": self.answer
         }
         return obs, info
 
@@ -146,6 +150,7 @@ class QAEnv(TextEnv):
         # r = self._reward(action)
         # if r > 1e-5:
         #     done = True
+
         fb = self.feedback_model.get_feedback(fb_obs, fb_info, truncated)
         return text_memory, text_item, fb['reward'], fb['terminated'] or truncated
 

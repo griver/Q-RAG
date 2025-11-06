@@ -35,13 +35,15 @@ class PQN(object):
         self.Lambda = config.pqn.hyperparams.Lambda
         self.tau = config.pqn.hyperparams.tau
         self.start_lr = config.pqn.optimizer.lr
+        print("tau", self.tau)
         # ===new===
         self.max_grad_norm = config.pqn.hyperparams.max_grad_norm
         self.accumulate_grads = config.pqn.hyperparams.accumulate_grads
         if self.accumulate_grads < 1:
             raise ValueError("cfg.accumulate_gradients must be a positive integer")
         self._update_step = 0  # number of updates from the start of the training
-        self.action_embed_length = config.pqn.hyperparams.action_embed_length
+        # self.action_embed_length = config.pqn.hyperparams.action_embed_length
+        self.max_action_length_in_memory = config.pqn.hyperparams.max_action_length_in_memory
 
         state_embed: nn.Module = instantiate(config.pqn.state_embed)
         action_embed: nn.Module = instantiate(config.pqn.action_embed)
@@ -111,7 +113,7 @@ class PQN(object):
     @torch.no_grad()
     def select_action(self, state: TextMemory, a_embeds: Tensor, a_embeds_target: Tensor, evaluate=False, random=False):
 
-        state = stack_memory([state], self.critic.action_embed.tokenizer, max_length=self.action_embed_length)
+        state = stack_memory([state], self.critic.action_embed.tokenizer, max_length=self.max_action_length_in_memory)
         a_embeds = custom_pad_sequence([a_embeds], padding_value=0.0, batch_first=True, pad_to_power_2=False)
         a_embeds_target = custom_pad_sequence([a_embeds_target], padding_value=0.0, batch_first=True, pad_to_power_2=False)
                 
@@ -287,7 +289,7 @@ class PQNActor:
             if pos is not None:
                 self.update_embeds(k, pos)
 
-        s_par = stack_memory(s_seq, self.state_tokenizer)
+        s_par = stack_memory(s_seq, self.state_tokenizer, max_length=self.agent.max_action_length_in_memory)
         
         a_embeds_pos = [emb["rope"] for emb in self.embeds]
         a_embeds_target_pos = [emb["rope"] for emb in self.embeds_target]

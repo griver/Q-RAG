@@ -11,11 +11,11 @@ type: gt
 
 never_terminate: False
 
-ground_truth: &ground_truth
+ground_truth: 
   _target_: rl.feedback.GroundTruthFeedback
-  penalize_extra_steps: False
+  penalize_extra_steps: True
 
-exact_match: &babi_exact_match
+exact_match: 
   _target_: rl.feedback.AnswerMetricFeedback
   llm_generator:
     _target_: rl.feedback.LLMGenerator
@@ -35,8 +35,8 @@ exact_match: &babi_exact_match
   never_terminate: ${feedback.never_terminate}
 
 feedback_dict:
-  gt: *ground_truth
-  babilong_em: *babi_exact_match
+  gt: ${feedback.ground_truth}
+  babilong_em: ${feedback.exact_match}
   #llm: *llm_judge:
   #  _target_: envs.text_env.RelativePositionProcessor
 
