@@ -64,6 +64,18 @@ def main():
     parser.add_argument("--max_tokens", type=int, default=32, help="Max tokens to generate")
     parser.add_argument('--gpu_util', type=float, default=0.3, help="Max gpu memory utilization. Default: 0.3")
     parser.add_argument('--think', action="store_true", default=False, help='enable_thinking for Qwen3 models.')
+    parser.add_argument('--chunk_filter', choices=["early_stop", 'none', 'llm', 'gt', 'no_noise'], default='none',
+                        help = ("Filtering mode for the retrieved chunks. "
+                                "Used for debugging and ablation studies of the Answering LLM."))
+    # filter_mode controls post-processing of chunks selected by the retriever:
+    # early_stop: remove all chunks that come after the point where all support facts are found
+    # none: do not filter selected chunks
+    # llm: (not implemented yet) filter selected chunks with an LLM
+    # gt: use only ground-truth support facts
+    #      [this mode tests the Answering LLM’s ability to produce correct answers
+    #       given a perfect retriever]
+    # no_noise: remove all noise (non-support) chunks from the chunks selected by the retriever
+    #      [used to test how sensitive the Answering LLM is to noisy information in the retrieved context]
     args = parser.parse_args()
 
     chat_template_kwargs = dict(
