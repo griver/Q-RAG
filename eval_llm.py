@@ -7,8 +7,10 @@ from tqdm import tqdm
 from vllm import LLM, SamplingParams
 import os
 
+
 os.environ["VLLM_CONFIGURE_LOGGING"] = "0"
 
+from prompts_and_metrics.chunk_filtering import build_chunk_filter
 from prompts_and_metrics.babilong import (
     #DEFAULT_PROMPTS,
     #TEMPLATE,
@@ -17,6 +19,8 @@ from prompts_and_metrics.babilong import (
     BabilongF1,
     BabilongPromptFormatter,
 )
+
+
 
 
 def save_final_scores(results_path: str, ns_key: str, f1: float, em: float) -> None:
@@ -78,6 +82,7 @@ def main():
     #      [used to test how sensitive the Answering LLM is to noisy information in the retrieved context]
     args = parser.parse_args()
 
+    chunk_filter = build_chunk_filter(args.chunk_filter)
     chat_template_kwargs = dict(
         add_generation_prompt=False, 
         tokenize=False
@@ -129,16 +134,22 @@ def main():
         for i in tqdm(range(len(lines)), desc="LLM eval", ncols=80):
             # if i >= max_samples:
             #     break
-            line = lines[i]
-            item = json.loads(line)
+            item = json.loads(lines[i])
             question = item["question"]
             answer = item["answer"]
-            facts_idx = item["pred_idx"]
-            facts = item.get("pred_text", [])
-            facts_sorted = [f for idx, f in sorted(zip(facts_idx, facts))]
+            #pred_idx = item["pred_idx"]
+            #pred_texts = item.get("pred_texts", [])
+
+            filtered_chunks = chunk_filter(item)
+            filter_idx = filtered_chunks["filtered_idx"]
+            filter_text = filtered_chunks["filtered_texts"]
+
+            #make sense only for babilong
+            filter_text = [f for idx, f in sorted(zip(filter_idx, filter_text))]
+            filter_idx = sorted(filter_idx)
 
             #messages = prepare_messages(question, facts_sorted, prompt_cfg, prompt_cfg["template"])
-            messages = prepare_messages(question, facts_sorted)
+            messages = prepare_messages(question, filter_text)
             prompt = llm.get_tokenizer().apply_chat_template(messages, **chat_template_kwargs)
             #print('Messages:', messages)
             #break
@@ -157,8 +168,8 @@ def main():
                 "prediction": prediction,
                 "answer_f1": ans_f1,
                 "answer_em": ans_em,
-                'pred_idx': sorted(facts_idx),
-                'pred_text': facts_sorted,
+                'filter_idx': filter_idx,
+                'filter_texts': filter_text,
             })
             f_out.write(json.dumps(item, ensure_ascii=False) + "\n")
             f_out.flush()
