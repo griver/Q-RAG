@@ -1,6 +1,7 @@
 task: "combined"
 dataset1_path: "/mnt/Datasets/Hotpotqa"
 dataset2_path: "/mnt/Datasets/Musique"
+dataset3_path: "/mnt/Datasets/Babilong"
 max_steps: 6
 sort_by_index: False
 
@@ -19,7 +20,8 @@ positions_processor_dict:
     step_size: 20
 
 train_dataset: &train_dataset
-  _target_: envs.RetrievalCombined
+  _target_: envs.RetrievalCombinedThree
+  shuffle: True  # Initial shuffle for training
   dataset1:
     _target_: envs.RetrievalHotPotQA
     path: ${envs.dataset1_path}
@@ -30,10 +32,21 @@ train_dataset: &train_dataset
     path: ${envs.dataset2_path}
     split: 'train'
     seed: ${seed}
-  shuffle: True
+  dataset3:
+    _target_: envs.RetrievalBabiLong
+    num_sentences: 100
+    task_dataset:
+      _target_: envs.dataloaders.babilong.TaskDataset
+      dataset_path: "${envs.dataset3_path}/babi/en-10k/qa2_two-supporting-facts_train.txt"
+    noise_sentence_sampler:
+      _target_: envs.dataloaders.babilong.RetrSentenceSampler
+      dataset:
+        _target_: datasets.load_from_disk
+        dataset_path: "${envs.dataset3_path}/pg19-with-sentences/train"
 
 test_dataset: &test_dataset
-  _target_: envs.RetrievalCombined
+  _target_: envs.RetrievalCombinedThree
+  shuffle: False  # No shuffle for testing
   dataset1:
     _target_: envs.RetrievalHotPotQA
     path: ${envs.dataset1_path}
@@ -44,7 +57,17 @@ test_dataset: &test_dataset
     path: ${envs.dataset2_path}
     split: 'eval'
     seed: ${seed}
-  shuffle: False  # No shuffle for testing
+  dataset3:
+    _target_: envs.RetrievalBabiLong
+    num_sentences: 100
+    task_dataset:
+      _target_: envs.dataloaders.babilong.TaskDataset
+      dataset_path: "${envs.dataset3_path}/babi/en-10k/qa2_two-supporting-facts_test.txt"
+    noise_sentence_sampler:
+      _target_: envs.dataloaders.babilong.RetrSentenceSampler
+      dataset:
+        _target_: datasets.load_from_disk
+        dataset_path: "${envs.dataset3_path}/pg19-with-sentences/test"
 
 # Core environment configuration for training
 env:
@@ -55,7 +78,7 @@ env:
   separator: " [SEP] "
   sort_by_index: ${envs.sort_by_index}
   positions_processor:
-    _target_: envs.text_env.AbsolutePositionProcessor  # Simplified reference
+    _target_: envs.text_env.AbsolutePositionProcessor
   feedback_model:
     _target_: rl.feedback.GroundTruthFeedback
     penalize_extra_steps: True

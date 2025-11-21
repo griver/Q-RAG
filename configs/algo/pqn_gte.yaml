@@ -92,7 +92,7 @@ pqn:
 
   optimizer:
     _target_: torch.optim.AdamW
-    lr: 1.0e-05            
+    lr: 5e-6
     betas: [0.9, 0.98]  
     eps: 1e-06          
     weight_decay: 0.001
