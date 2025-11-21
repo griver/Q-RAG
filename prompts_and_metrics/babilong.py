@@ -637,6 +637,7 @@ class BabilongF1(AnswerMetric):
 
     def __call__(self, prediction, target):
         target = target.lower()
+        prediction = prediction.lower()
 
         # extract labels that were mentioned in the model output
         labels_in_pred = {label for label in self.task_labels if label in prediction}

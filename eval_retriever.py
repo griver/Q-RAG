@@ -245,7 +245,7 @@ def main(argv: List[str] | None = None) -> None:
             "sf_idx": [int(idx) for idx in sample["sf_idx"]],
             "pred_idx": res["pred_idx"],
             "sf_texts": [sample["chunks"][idx] for idx in sample["sf_idx"]],
-            "pred_text": [sample["chunks"][idx] for idx in res["pred_idx"]],
+            "pred_texts": [sample["chunks"][idx] for idx in res["pred_idx"]],
             "return": res["return"],
             "text_len": res["text_len"],
             "f1": res["f1"],
