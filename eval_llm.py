@@ -7,8 +7,10 @@ from tqdm import tqdm
 from vllm import LLM, SamplingParams
 import os
 
+
 os.environ["VLLM_CONFIGURE_LOGGING"] = "0"
 
+from prompts_and_metrics.chunk_filtering import build_chunk_filter
 from prompts_and_metrics.babilong import (
     #DEFAULT_PROMPTS,
     #TEMPLATE,
@@ -17,6 +19,8 @@ from prompts_and_metrics.babilong import (
     BabilongF1,
     BabilongPromptFormatter,
 )
+
+
 
 
 def save_final_scores(results_path: str, ns_key: str, f1: float, em: float) -> None:
@@ -64,8 +68,21 @@ def main():
     parser.add_argument("--max_tokens", type=int, default=32, help="Max tokens to generate")
     parser.add_argument('--gpu_util', type=float, default=0.3, help="Max gpu memory utilization. Default: 0.3")
     parser.add_argument('--think', action="store_true", default=False, help='enable_thinking for Qwen3 models.')
+    parser.add_argument('--chunk_filter', choices=["early_stop", 'none', 'llm', 'gt', 'no_noise'], default='none',
+                        help = ("Filtering mode for the retrieved chunks. "
+                                "Used for debugging and ablation studies of the Answering LLM."))
+    # filter_mode controls post-processing of chunks selected by the retriever:
+    # early_stop: remove all chunks that come after the point where all support facts are found
+    # none: do not filter selected chunks
+    # llm: (not implemented yet) filter selected chunks with an LLM
+    # gt: use only ground-truth support facts
+    #      [this mode tests the Answering LLM’s ability to produce correct answers
+    #       given a perfect retriever]
+    # no_noise: remove all noise (non-support) chunks from the chunks selected by the retriever
+    #      [used to test how sensitive the Answering LLM is to noisy information in the retrieved context]
     args = parser.parse_args()
 
+    chunk_filter = build_chunk_filter(args.chunk_filter)
     chat_template_kwargs = dict(
         add_generation_prompt=True, 
         tokenize=False
@@ -117,16 +134,22 @@ def main():
         for i in tqdm(range(len(lines)), desc="LLM eval", ncols=80):
             # if i >= max_samples:
             #     break
-            line = lines[i]
-            item = json.loads(line)
+            item = json.loads(lines[i])
             question = item["question"]
             answer = item["answer"]
-            facts_idx = item["pred_idx"]
-            facts = item.get("pred_text", [])
-            facts_sorted = [f for idx, f in sorted(zip(facts_idx, facts))]
+            #pred_idx = item["pred_idx"]
+            #pred_texts = item.get("pred_texts", [])
+
+            filtered_chunks = chunk_filter(item)
+            filter_idx = filtered_chunks["filtered_idx"]
+            filter_text = filtered_chunks["filtered_texts"]
+
+            #make sense only for babilong
+            filter_text = [f for idx, f in sorted(zip(filter_idx, filter_text))]
+            filter_idx = sorted(filter_idx)
 
             #messages = prepare_messages(question, facts_sorted, prompt_cfg, prompt_cfg["template"])
-            messages = prepare_messages(question, facts_sorted)
+            messages = prepare_messages(question, filter_text)
             prompt = llm.get_tokenizer().apply_chat_template(messages, **chat_template_kwargs)
             #print('Messages:', messages)
             #break
@@ -145,8 +168,8 @@ def main():
                 "prediction": prediction,
                 "answer_f1": ans_f1,
                 "answer_em": ans_em,
-                'pred_idx': sorted(facts_idx),
-                'pred_text': facts_sorted,
+                'filter_idx': filter_idx,
+                'filter_texts': filter_text,
             })
             f_out.write(json.dumps(item, ensure_ascii=False) + "\n")
             f_out.flush()

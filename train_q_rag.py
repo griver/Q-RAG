@@ -14,7 +14,6 @@ import numpy as np
 from envs.qa_env import QAEnv
 from envs.parallel_env import ParallelTextEnv
 from tqdm import tqdm
-import torch
 from omegaconf import OmegaConf, DictConfig
 from hydra.utils import instantiate
 from hydra import initialize, compose
@@ -51,6 +50,7 @@ def load_config(name, overrides=None):
         cfg = prepare_config(cfg)
         return cfg
 
+
 def prepare_config(cfg):
     """
     modifies config for parameters that should depend on each other
@@ -74,8 +74,8 @@ def set_all_seeds(seed):
   torch.backends.cudnn.deterministic = True
 
 
-#cfg: DictConfig = load_config(name="training_qwen3.yaml")
 cfg: DictConfig = load_config(name="training.yaml")
+#cfg: DictConfig = load_config(name="training_gte_combined.yaml")
 
 writer: SummaryWriter = instantiate(cfg.logger.tensorboard)
 os.makedirs(cfg.logger.log_dir, exist_ok=True)
