@@ -18,6 +18,7 @@ class QADatasetAdapter(Dataset):
         super().__init__()
         self.dataset = dataset
         self.dataset_name = self.dataset.name()
+        print(f"{self.dataset_name} dataset length: {self.dataset.__len__()}")
 
 
     def __getitem__(self, index):
@@ -27,7 +28,7 @@ class QADatasetAdapter(Dataset):
 
         if self.dataset_name == "combined":
             source = sample.get('source')
-            if source not in ('hotpotqa', 'musique'):
+            if source not in ('hotpotqa', 'musique', 'babilong'):
                 raise ValueError(f"Invalid or missing 'source' in combined dataset sample: {source}")
         else:
             source = self.dataset_name
