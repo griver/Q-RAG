@@ -67,7 +67,7 @@ def main():
     args = parser.parse_args()
 
     chat_template_kwargs = dict(
-        add_generation_prompt=False, 
+        add_generation_prompt=True, 
         tokenize=False
     )
     if "Qwen3" in args.llm_name:
