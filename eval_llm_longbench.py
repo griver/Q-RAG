@@ -79,7 +79,7 @@ def main():
         print(f"Set enable_thinking = {args.think} for {args.llm_name}")
 
     vllm_config = {
-        'gpu_memory_utilization': 0.96,
+        'gpu_memory_utilization': 0.95,
         'max_model_len': 10000,
         'dtype': 'bfloat16',
         'quantization': None,
@@ -89,7 +89,7 @@ def main():
 
     sampling_params = {
         'max_tokens': args.max_tokens,
-        'temperature': 0.0,
+        'temperature': 0.01,
         "stop": None,
         'top_k': 3,
         'top_p': 0.7

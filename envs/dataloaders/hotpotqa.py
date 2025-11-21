@@ -11,20 +11,20 @@ logger = logging.getLogger(__name__)
 class RetrievalHotPotQA(Dataset):
     def __init__(self,
                  path,
+                 split,
                  tokenizer = None,
                  length = -1,
                  min_context_len = None,
                  max_context_len = None,
-                 seed = 52,
-                 **kwargs
+                 seed = 52, #**kwargs
         ):
         super().__init__()
-        split = kwargs.pop('split')
+        #split = kwargs.pop('split')
         if split not in ['train', 'eval', 'all',  'fullwiki_eval']:
             #'all' includes 'train' and 'eval' but not fullwiki_eval
             raise ValueError(f'unknown split for hotpotqa dataset: {split}')
         self.split = split
-        logger.info(f"{type(self)} received unknown kwargs: {kwargs}")
+        #logger.info(f"{type(self)} received unknown kwargs: {kwargs}")
         self.length = length
         self.min_context_len = min_context_len
         self.max_context_len = max_context_len

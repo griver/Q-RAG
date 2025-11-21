@@ -18,11 +18,11 @@ import sys
 
 
 # eval_retrieval.py generates a json file with extracted chunks; the path to this file should be inserted here.
-file_path = "runs/Nov03_11-48-17_QRAG_combined/eval_seed42_ns50.jsonl"
-output_file_path = "runs/Nov03_11-48-17_QRAG_combined/eval-Phi3.5.json"
+file_path = "runs/Nov03_11-48-17_QRAG_combined/eval_hotpotqa_ms4.jsonl"
+output_file_path = "runs/Nov03_11-48-17_QRAG_combined/eval_hotpotqa_ms4_QwQ-32B.json"
 
-model_name = "/mnt/Phi-3.5-mini-instruct"
-#model_name = "/mnt/QwQ-32B"
+№model_name = "/mnt/Phi-3.5-mini-instruct"
+model_name = "/mnt/QwQ-32B"
 
 
 dataset = []
@@ -131,7 +131,11 @@ tokenizer = AutoTokenizer.from_pretrained(model_name)
 
 # Загружаем модель с помощью LLM класса из vllm
 # Если у вас несколько GPU, можно добавить: tensor_parallel_size=N
-llm = LLM(model=model_name, trust_remote_code=True, gpu_memory_utilization=0.95, max_seq_len_to_capture=32000)
+llm = LLM(model=model_name,
+          trust_remote_code=True,
+          gpu_memory_utilization=0.95,
+          max_seq_len_to_capture=32000,
+          max_model_len=32000,)
 print(f"Модель {model_name} успешно загружена с помощью vLLM.")
 
 
@@ -143,7 +147,7 @@ all_em_scores = []
 all_f1_scores = []
 
 all_prompts = []
-for data in tqdm(dataset, desc="Подготовка промптов"):
+for data in tqdm(dataset[:500], desc="Подготовка промптов"):
     question = data['question']
     context = "\n\n---\n\n".join(data['pred_text'])
     full_prompt_for_model = qa_prompt.format(context=context, question=question)
