@@ -141,16 +141,15 @@ class QAEnv(TextEnv):
     def step(self, action: int):
         self.num_steps += 1
 
-        truncated = self.num_steps >= self.max_steps
-        
-        text_memory, text_item, done = super()._step(action)
+        text_memory, text_item, no_actions_left = super()._step(action)
+
+        truncated = no_actions_left or (self.num_steps >= self.max_steps)
 
         fb_obs, fb_info = self._make_obs_and_info()
 
         # r = self._reward(action)
         # if r > 1e-5:
         #     done = True
-
         fb = self.feedback_model.get_feedback(fb_obs, fb_info, truncated)
         return text_memory, text_item, fb['reward'], fb['terminated'] or truncated
 
