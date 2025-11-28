@@ -84,7 +84,7 @@ class QADatasetAdapter(Dataset):
         else:
             raise ValueError(f"Unsupported dataset/source: {source}")
 
-        #if question.endswith("?"):  question = question[:-1]
+        if question.endswith("?"):  question = question[:-1]
         result = {
             'id': sample_id,
             'question': question,
