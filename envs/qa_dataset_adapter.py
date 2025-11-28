@@ -18,7 +18,7 @@ class QADatasetAdapter(Dataset):
         super().__init__()
         self.dataset = dataset
         self.dataset_name = self.dataset.name()
-        #print(f"{self.dataset_name} dataset length: {self.dataset.__len__()}")
+        print(f"{self.dataset_name} dataset length: {self.dataset.__len__()}")
 
 
     def __getitem__(self, index):
@@ -65,7 +65,7 @@ class QADatasetAdapter(Dataset):
             chunks_texts = sample['chunks']
             sf_idx = list(sample['references_idx'])
 
-        elif source == "longbench":
+        elif source == 'longbench':
             sample_id = sample["_id"]
             question = sample["input"]
             answer = sample["answers"][0]
@@ -74,17 +74,11 @@ class QADatasetAdapter(Dataset):
             sf_idx.append(0)
             #print("Chunks count:", len(chunks_texts))
 
-        elif source == "gsm8k":
-            sample_id = index
-            question = sample["question"]
-            answer = envs.dataloaders.gsm8k.extract_short_answer(sample["answer"])
-            chunks_texts = self.dataset.get_examples()
-            sf_idx = [0]
-
         else:
             raise ValueError(f"Unsupported dataset/source: {source}")
 
-        #if question.endswith("?"):  question = question[:-1]
+        if question.endswith("?"):  question = question[:-1]
+
         result = {
             'id': sample_id,
             'question': question,
