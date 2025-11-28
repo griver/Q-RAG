@@ -3,8 +3,8 @@ num_sentences: 100
 task: "qa3_three-supporting-facts"  #"qa2_two-supporting-facts" #"qa1_single-supporting-fact"
 noise_train_path: "../datasets/babilong/pg19-with-sentences/train"
 noise_test_path: "../datasets/babilong/pg19-with-sentences/test"
-facts_train_path: "../datasets/babilong/tasks_1-20_v1-2/en-10k/${envs.task}_train.txt"
-facts_test_path: "../datasets/babilong/tasks_1-20_v1-2/en-10k/${envs.task}_test.txt"
+facts_train_path: "../datasets/babilong/babi/en-10k/${envs.task}_train.txt"
+facts_test_path: "../datasets/babilong/babi/en-10k/${envs.task}_test.txt"
 
 positions_processor: relative
 
