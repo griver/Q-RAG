@@ -34,6 +34,8 @@ class AFeedbackModel(ABC):
         """
         reward = self.reward(obs, info, is_final=truncated)
 
+        # print("reward", reward)
+
         if isinstance(self.completed, bool):
             terminated = False if self.never_terminate else self.completed
             return {
@@ -89,6 +91,7 @@ class GroundTruthFeedback(AFeedbackModel):
     """
     FEEDBACK_MODEL_NAME="ground_truth"
     def __init__(self, penalize_extra_steps=False, completion_reward=1.0, per_fact_reward=0.0, never_terminate=False):
+        print("never_terminate", never_terminate)
         super().__init__(never_terminate=never_terminate)
         #r_0 = 0.1, r_1 = 1.1
         self.per_fact_reward = per_fact_reward
@@ -129,5 +132,6 @@ class GroundTruthFeedback(AFeedbackModel):
             penalize_extra_steps=self.penalize_extra_steps,
             completion_reward=self.completion_reward,
             per_fact_reward=self.per_fact_reward,
+            never_terminate=self.never_terminate
         )
 

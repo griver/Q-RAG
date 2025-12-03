@@ -9,12 +9,12 @@ type: gt
 # keep in mind that if you access vllm via api vllm_config dict in this config will be ignored
 # TODO: add vllm_config in a different file to enable using it in `vllm serve ...`
 
-never_terminate: False
+never_terminate: True
 
 ground_truth: 
   _target_: rl.feedback.GroundTruthFeedback
   penalize_extra_steps: True
-  never_terminate: ${feedback.never_terminate}
+  never_terminate: True
 
 exact_match: 
   _target_: rl.feedback.AnswerMetricFeedback
@@ -28,7 +28,7 @@ exact_match:
     api_key: ${feedback.api_key}
     max_at_same_time: ${feedback.max_at_same_time}
     prepare_messages_func: ${feedback.prompt_formatter}
-    disable_thinking: True #only for Qwen3 models, remove for other models
+    disable_thinking: False #only for Qwen3 models, remove for other models
 
   metric: ${feedback.metric}
   completion_threshold: ${feedback.reward_scaling}
@@ -42,7 +42,7 @@ feedback_dict:
   #  _target_: envs.text_env.RelativePositionProcessor
 
 
-model: 'Qwen/Qwen3-1.7B'
+model: 'Qwen/Qwen3-4B'
 reward_scaling: 1.0
 
 sampling_params:
@@ -59,7 +59,7 @@ vllm_config:
   trust_remote_code: true
 
 
-use_api: false
+use_api: true
 api_base_url: "http://localhost:10001/v1"
 api_key: "keykey"
 max_at_same_time: 20

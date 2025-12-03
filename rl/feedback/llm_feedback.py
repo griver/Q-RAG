@@ -487,7 +487,7 @@ class AnswerMetricFeedback(AFeedbackModel):
         super().reset(obs, info)
 
     def reward(self, obs, info, is_final=None):
-        if self.completed: return 0.
+        # if self.completed: return 0.
         question = obs['question']
         pred_chunks = obs.get('pred_chunks', [])
         predicted_answer = self.llm.generate_answer(question, pred_chunks)
