@@ -14,6 +14,7 @@ never_terminate: False
 ground_truth: 
   _target_: rl.feedback.GroundTruthFeedback
   penalize_extra_steps: True
+  never_terminate: ${feedback.never_terminate}
 
 exact_match: 
   _target_: rl.feedback.AnswerMetricFeedback

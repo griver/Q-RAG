@@ -1,6 +1,6 @@
 defaults:
   - algo: pqn_gte
-  - envs: combined
+  - envs: combined_3
   - feedback: defaults
   - logger: logging
   - _self_
@@ -14,5 +14,5 @@ accumulate_grads: 2
 eval_interval: 100
 eval_episodes: 300
 envs_parallel: 1
-max_action_length: 512
+max_action_length: 256
 max_action_length_in_memory: 256

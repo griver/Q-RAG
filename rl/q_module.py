@@ -127,6 +127,10 @@ class TextQNetPolicy(nn.Module):
 
         probs = ((logits - logits.max(-1, keepdim=True).values) / alpha).softmax(-1)
         probs[(s.available_mask & top_mask) == False] = 0
+        # print(f'probs.sum(): {probs.sum(-1).item()}')
+        # print(f'availables: {s.available_mask[0].tolist()}')
+        # print(f'top_mask: {top_mask[0].tolist()}')
+        # print(f'top_mask & avail: {(top_mask & s.available_mask)[0].tolist()}')
         probs = probs / probs.sum(-1, keepdim=True)
         dist = torch.distributions.Categorical(probs = probs)
         action = dist.sample()

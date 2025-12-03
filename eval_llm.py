@@ -92,7 +92,7 @@ def main():
     chunk_filter = build_chunk_filter(args.chunk_filter, **filter_kwargs)
 
     chat_template_kwargs = dict(
-        add_generation_prompt=False, 
+        add_generation_prompt=True, 
         tokenize=False
     )
     if "Qwen3" in args.llm_name:
