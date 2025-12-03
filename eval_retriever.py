@@ -110,6 +110,7 @@ def evaluate_episode(env: QAEnv, agent: PQN, sample=None) -> dict:
     )
     episode_return = 0.0
 
+    num_steps = 0
     while not done:
 
         embeds = env.update_embeds(embeds, agent.critic.action_embed)
@@ -124,6 +125,7 @@ def evaluate_episode(env: QAEnv, agent: PQN, sample=None) -> dict:
         )
         state, _, reward, done = env.step(action)
         episode_return += reward
+        num_steps += 1
 
     pred_sf = [int(i) for i in state.item_ids]
     gt_sf = list(env.references_idx)
@@ -135,6 +137,7 @@ def evaluate_episode(env: QAEnv, agent: PQN, sample=None) -> dict:
         'f1': f1,
         'em': em,
         'pred_idx': pred_sf,
+        'num_steps': num_steps
     }
 
 
@@ -215,7 +218,7 @@ def main(argv: List[str] | None = None) -> None:
     text_lens = []
     all_em = []
     all_f1 = []
-
+    num_steps = []
     # metrics for already processed samples
     for item in existing.values():
         f1, em = calc_fact_f1_em(item["pred_idx"], item["sf_idx"])
@@ -227,6 +230,7 @@ def main(argv: List[str] | None = None) -> None:
             text_lens.append(item["text_len"])
 
     f = open(log_path, "a")
+
     for i in tqdm(range(cfg.num_samples), desc="Evaluating", ncols=80):
         sample = env_test.dataset[i]
         if sample["id"] in existing:
@@ -237,6 +241,7 @@ def main(argv: List[str] | None = None) -> None:
         text_lens.append(res["text_len"])
         all_f1.append(res["f1"])
         all_em.append(res["em"])
+        num_steps.append(res["num_steps"])
 
         entry = {
             "id": sample["id"],
@@ -259,6 +264,8 @@ def main(argv: List[str] | None = None) -> None:
         f.flush()
 
     f.close()
+    #print(f'E[num_steps] = {np.mean(num_steps)}')
+    #print(num_steps)
 
     mean_return = float(np.mean(returns))
     std_return = float(np.std(returns))

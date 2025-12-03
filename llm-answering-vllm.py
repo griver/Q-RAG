@@ -30,7 +30,7 @@ with open(file_path, "r", encoding="utf-8") as f:
     for line in f:
         dataset.append(json.loads(line))
 
-print(f"Загружено {len(dataset)} сэмплов.")
+print(f"Samples in dataset: {len(dataset)}")
 
 os.environ["VLLM_USE_TORCH_COMPILE"] = "0"
 os.environ["TORCH_COMPILE_DISABLE"] = "1"

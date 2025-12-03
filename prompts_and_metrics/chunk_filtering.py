@@ -66,6 +66,29 @@ class EarlyStopChunkFilter(ChunkFilter):
         return self._format_output(filtered_idx, filtered_texts)
 
 
+@dataclass
+class QValueChunkFilter(ChunkFilter):
+    """
+    Filter chunks by Q-function value.
+    If the Q(s_t,a_t) <= stopping_threshold then all chunks starting from a_t are removed.
+    """
+
+    stopping_threshold: int = -0.5 #value to never stop retriever
+
+    def __call__(self, retriever_results: Dict) -> Dict[str, List]:
+        pred_idx, pred_texts = self._get_predicted_chunks(retriever_results)
+        q_values = retriever_results['q_values']
+
+        i = 0
+        while i < len(q_values):
+            if q_values[i] <= self.stopping_threshold: break
+            i += 1
+
+        return self._format_output(pred_idx[:i], pred_texts[:i])
+
+
+
+
 class NoChunkFilter(ChunkFilter):
     """Return retriever-selected chunks unchanged."""
 
@@ -115,6 +138,7 @@ _FILTERS = {
     "gt": GroundTruthChunkFilter,
     "no_noise": NoNoiseChunkFilter,
     "llm": LLMChunkFilter,
+    "qvalue": QValueChunkFilter,
 }
 
 
@@ -135,5 +159,6 @@ __all__ = [
     "NoNoiseChunkFilter",
     "NoChunkFilter",
     "LLMChunkFilter",
+    "QValueChunkFilter",
     "build_chunk_filter",
 ]
