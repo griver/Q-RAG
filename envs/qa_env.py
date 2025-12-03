@@ -150,7 +150,6 @@ class QAEnv(TextEnv):
         # r = self._reward(action)
         # if r > 1e-5:
         #     done = True
-
         fb = self.feedback_model.get_feedback(fb_obs, fb_info, truncated)
         return text_memory, text_item, fb['reward'], fb['terminated'] or truncated
 
