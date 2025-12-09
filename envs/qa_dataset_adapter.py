@@ -17,7 +17,7 @@ class QADatasetAdapter(Dataset):
     def __init__(self, dataset):
         super().__init__()
         self.dataset = dataset
-        self.dataset_name = self.dataset.name()
+        self.dataset_name = dataset.name()
         print(f"{self.dataset_name} dataset length: {self.dataset.__len__()}")
 
 
@@ -33,11 +33,11 @@ class QADatasetAdapter(Dataset):
         else:
             source = self.dataset_name
 
-        if source == 'hotpotqa':
-            sp_title_set = set()
+        if source == 'hotpotqa' or source == '2WikiMultihopQA':
             sample_id = sample['_id']
             question = sample["question"]
             answer = sample["answer"]
+            sp_title_set = set()
             for sup in sample['supporting_facts']:
                 sp_title_set.add(sup[0])
             for idx, (title, sentences) in enumerate(sample['context']):
@@ -70,19 +70,17 @@ class QADatasetAdapter(Dataset):
             question = sample["input"]
             answer = sample["answers"][0]
             chunks_texts = envs.chunker.chunks_split(sample["context"], chunk_size=CHUNK_SIZE)
-            #sf_idx = None
-            sf_idx.append(0)
+            sf_idx.append(0)  #sf_idx = None
             #print("Chunks count:", len(chunks_texts))
 
         else:
             raise ValueError(f"Unsupported dataset/source: {source}")
 
-        if question.endswith("?"):  question = question[:-1]
-
+        #if question.endswith("?"):  question = question[:-1]
         result = {
             'id': sample_id,
             'question': question,
-            'answer': answer, # sample["answer"],
+            'answer': answer,
             'chunks': chunks_texts,
             'sf_idx': sf_idx,
         }

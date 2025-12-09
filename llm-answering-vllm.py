@@ -18,11 +18,11 @@ import sys
 
 
 # eval_retrieval.py generates a json file with extracted chunks; the path to this file should be inserted here.
-file_path = "runs/Nov03_11-48-17_QRAG_combined/eval_hotpotqa_ms4.jsonl"
-output_file_path = "runs/Nov03_11-48-17_QRAG_combined/eval_hotpotqa_ms4_QwQ-32B.json"
+file_path = "/mnt/CheckPoints/GTE_Hotpotqa+Musique/eval_2WikiMultihopQA.jsonl"
+output_file_path = "/mnt/CheckPoints/GTE_Hotpotqa+Musique/eval_2WikiMultihopQA_Phi-3.5.json"
 
-№model_name = "/mnt/Phi-3.5-mini-instruct"
-model_name = "/mnt/QwQ-32B"
+model_name = "/mnt/Phi-3.5-mini-instruct"
+#model_name = "/mnt/QwQ-32B"
 
 
 dataset = []
@@ -147,9 +147,9 @@ all_em_scores = []
 all_f1_scores = []
 
 all_prompts = []
-for data in tqdm(dataset[:500], desc="Подготовка промптов"):
+for data in tqdm(dataset, desc="Подготовка промптов"):
     question = data['question']
-    context = "\n\n---\n\n".join(data['pred_text'])
+    context = "\n\n---\n\n".join(data['pred_texts'])
     full_prompt_for_model = qa_prompt.format(context=context, question=question)
 
     messages = [
@@ -170,7 +170,7 @@ print(f"Подготовлено {len(all_prompts)} промптов для ба
 # 2. Запускаем генерацию для всех промптов ОДНИМ вызовом
 # Задаем параметры генерации
 sampling_params = SamplingParams(
-    max_tokens=8000,
+    max_tokens=1000,
     temperature=0.0, # temperature=0.0 для жадной генерации
 )
 
