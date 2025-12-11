@@ -1,6 +1,6 @@
 defaults:
   - algo: pqn_gte
-  - envs: combined_3
+  - envs: hotpotqa+musique+2wikimultihopqa
   - feedback: defaults
   - logger: logging
   - _self_
@@ -8,7 +8,7 @@ defaults:
 seed: 42
 device: 'cuda:0'
 learning_start: 200
-steps_count: 50_000
+steps_count: 70_000
 batch_size: 16
 accumulate_grads: 2
 eval_interval: 100

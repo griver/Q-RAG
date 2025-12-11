@@ -28,7 +28,7 @@ class QADatasetAdapter(Dataset):
 
         if self.dataset_name == "combined":
             source = sample.get('source')
-            if source not in ('hotpotqa', 'musique', 'babilong'):
+            if source not in ('hotpotqa', 'musique', 'babilong', '2WikiMultihopQA'):
                 raise ValueError(f"Invalid or missing 'source' in combined dataset sample: {source}")
         else:
             source = self.dataset_name
