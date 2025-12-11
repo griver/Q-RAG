@@ -193,8 +193,8 @@ def collect_episode_stats(env: QAEnv, agent: PQN, sample=None) -> dict:
     # Возвращаем структуру для сохранения
     return {
         "q_values": q_values,          # Список Q-значений для каждого шага
-        "actions": actions,            # Список выбранных индексов чанков
-        "gt_ids": list(env.references_idx), # Список правильных чанков (Ground Truth)
+        "pred_idx": actions,            # Список выбранных индексов чанков
+        "sf_idx": list(env.references_idx), # Список правильных чанков (Ground Truth)
         #"total_elements": 20           # Общее кол-во чанков
     }
 
