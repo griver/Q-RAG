@@ -18,11 +18,13 @@ import sys
 
 
 # eval_retrieval.py generates a json file with extracted chunks; the path to this file should be inserted here.
-file_path = "/mnt/CheckPoints/GTE_Hotpotqa+Musique/eval_2WikiMultihopQA.jsonl"
-output_file_path = "/mnt/CheckPoints/GTE_Hotpotqa+Musique/eval_2WikiMultihopQA_Phi-3.5.json"
+file_path = "/mnt/CheckPoints/GTE_Hotpotqa+Musique/eval_seed42_ns50.jsonl"
+output_file_path = "/mnt/CheckPoints/GTE_Hotpotqa+Musique/eval_Qwen3-14B.json"
 
-model_name = "/mnt/Phi-3.5-mini-instruct"
+#model_name = "/mnt/Phi-3.5-mini-instruct"
+model_name = "/mnt/Qwen3-14B"
 #model_name = "/mnt/QwQ-32B"
+
 
 
 dataset = []
@@ -134,7 +136,6 @@ tokenizer = AutoTokenizer.from_pretrained(model_name)
 llm = LLM(model=model_name,
           trust_remote_code=True,
           gpu_memory_utilization=0.95,
-          max_seq_len_to_capture=32000,
           max_model_len=32000,)
 print(f"Модель {model_name} успешно загружена с помощью vLLM.")
 
@@ -170,7 +171,7 @@ print(f"Подготовлено {len(all_prompts)} промптов для ба
 # 2. Запускаем генерацию для всех промптов ОДНИМ вызовом
 # Задаем параметры генерации
 sampling_params = SamplingParams(
-    max_tokens=1000,
+    max_tokens=4000,
     temperature=0.0, # temperature=0.0 для жадной генерации
 )
 

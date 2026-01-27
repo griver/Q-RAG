@@ -39,7 +39,7 @@ class RetrievalLongBench(Dataset):
 
 
     def name(self):
-        return 'longbench'
+        return 'LongBench'
 
 
     def _adapt_raw_sample(self, sample):
