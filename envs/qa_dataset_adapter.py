@@ -17,34 +17,34 @@ class QADatasetAdapter(Dataset):
     def __init__(self, dataset):
         super().__init__()
         self.dataset = dataset
-        self.dataset_name = self.dataset.name()
-        print(f"{self.dataset_name} dataset length: {self.dataset.__len__()}")
+        self.dataset_name = dataset.name()
+        #print(f"{self.dataset_name} dataset length: {self.dataset.__len__()}")
 
 
     def __getitem__(self, index):
         sample = self.dataset[index]
         sf_idx = []
-        chunks_texts = []
+        chunk_texts = []
 
         if self.dataset_name == "combined":
             source = sample.get('source')
-            if source not in ('hotpotqa', 'musique', 'babilong'):
+            if source not in ('hotpotqa', 'musique', 'babilong', '2WikiMultihopQA'):
                 raise ValueError(f"Invalid or missing 'source' in combined dataset sample: {source}")
         else:
             source = self.dataset_name
 
-        if source == 'hotpotqa':
-            sp_title_set = set()
+        if source in {'hotpotqa', '2WikiMultihopQA'}:
             sample_id = sample['_id']
             question = sample["question"]
             answer = sample["answer"]
+            sp_title_set = set()
             for sup in sample['supporting_facts']:
                 sp_title_set.add(sup[0])
             for idx, (title, sentences) in enumerate(sample['context']):
                 if title in sp_title_set:
                     sf_idx.append(idx)
                 chunk = title + " " + " ".join(sentences)
-                chunks_texts.append(chunk)
+                chunk_texts.append(chunk)
 
         elif source == 'musique':
             sample_id = sample['id']
@@ -54,7 +54,7 @@ class QADatasetAdapter(Dataset):
                 # if para['is_supporting']:
                 #     sf_idx.append(i)
                 chunk = para['title'] + '. ' + para['paragraph_text']
-                chunks_texts.append(chunk)
+                chunk_texts.append(chunk)
             for item_json in sample['question_decomposition']:
                 sf_idx.append(item_json['paragraph_support_idx'])
 
@@ -62,37 +62,34 @@ class QADatasetAdapter(Dataset):
             sample_id = index
             question = sample["question"]
             answer = sample["answer"]
-            chunks_texts = sample['chunks']
+            chunk_texts = sample['chunks']
             sf_idx = list(sample['references_idx'])
 
-        elif source == 'longbench':
+        elif source == 'LongBench':
             sample_id = sample["_id"]
             question = sample["input"]
             answer = sample["answers"][0]
-            chunks_texts = envs.chunker.chunks_split(sample["context"], chunk_size=CHUNK_SIZE)
-            #sf_idx = None
-            sf_idx.append(0)
+            chunk_texts = envs.chunker.chunks_split(sample["context"], chunk_size=CHUNK_SIZE)
+            sf_idx.append(0)  #sf_idx = None
             #print("Chunks count:", len(chunks_texts))
+
+        elif source == 'RulerQA':
+            sample_id = sample['index']
+            question = sample["question"]
+            answer = sample['outputs'][0]
+            chunk_texts = sample['documents']
+            sf_idx.append(0)  #sf_idx = None
 
         else:
             raise ValueError(f"Unsupported dataset/source: {source}")
 
-        if question.endswith("?"):  question = question[:-1]
-
         result = {
             'id': sample_id,
             'question': question,
-            'answer': answer, # sample["answer"],
-            'chunks': chunks_texts,
+            'answer': answer,
+            'chunks': chunk_texts,
             'sf_idx': sf_idx,
         }
-        # if len(chunks_texts) != 10:
-        #     print(f'sample {sample_id}, num_chunks: {len(chunks_texts)}')
-        #     print('Q:', question)
-        #     print('A:', sample['answer'])
-        #     print('sf_idx:', result['sf_idx'])
-        #     for i, ch in enumerate(chunks_texts):
-        #         print(f"== CH#{i} ==\n {ch}")
         return result
 
 

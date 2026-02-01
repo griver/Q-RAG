@@ -99,6 +99,8 @@ class GroundTruthFeedback(AFeedbackModel):
         self.penalize_extra_steps = penalize_extra_steps
         self.sf_idx = None
         self.found_facts = set()
+        print("never_terminate:", never_terminate)
+        print("penalize_extra_steps:", penalize_extra_steps)
 
     def reset(self, obs, info) -> None:
         super().reset(obs, info)

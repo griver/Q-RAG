@@ -1,8 +1,9 @@
 import random
 import torch
-from hydra.utils import instantiate
+#from hydra.utils import instantiate
 from envs.dataloaders import RetrievalHotPotQA
 from envs.dataloaders import RetrievalMusique
+from envs.dataloaders import Retrieval2WikiMultihopQA
 from envs.dataloaders.babilong import RetrievalBabiLong
 
 
@@ -54,11 +55,10 @@ class RetrievalCombinedThree(torch.utils.data.Dataset):
     def __init__(self, shuffle: bool,
                  dataset1: RetrievalHotPotQA,
                  dataset2: RetrievalMusique,
-                 dataset3: RetrievalBabiLong):
+                 dataset3: Retrieval2WikiMultihopQA):
         self.dataset1 = dataset1
         self.dataset2 = dataset2
         self.dataset3 = dataset3
-        self._name = "combined"
         self.rng = random.Random(42)
         self.shuffle = shuffle
         self.len1 = len(self.dataset1)
@@ -68,14 +68,6 @@ class RetrievalCombinedThree(torch.utils.data.Dataset):
         self.indices = list(range(self.total_length))
         if self.shuffle:
             self.rng.shuffle(self.indices)
-
-
-    def name(self):
-        return self._name
-
-
-    def __len__(self):
-        return self.total_length
 
 
     def __getitem__(self, idx):
@@ -88,15 +80,17 @@ class RetrievalCombinedThree(torch.utils.data.Dataset):
             return {**sample, "source": "musique"}
         else:
             sample = self.dataset3[actual_idx - self.len1 - self.len2]
-            return {**sample, "source": "babilong"}
+            return {**sample, "source": "2WikiMultihopQA"}
+
+
+    def name(self):
+        return "combined"
+
+
+    def __len__(self):
+        return self.total_length
 
 
     def reshuffle(self):
         if self.shuffle:
             self.rng.shuffle(self.indices)
-
-
-
-
-
-

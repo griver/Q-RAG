@@ -160,6 +160,7 @@ def load_eval_config(name):
     OmegaConf.resolve(cfg)
     return cfg, train_cfg
 
+
 def main(argv: List[str] | None = None) -> None:
     cfg, train_cfg = load_eval_config("testing.yaml")
     # Set global MAX_TOKEN_LENGTH constants before tokenisers are built
