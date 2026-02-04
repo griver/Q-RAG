@@ -1,6 +1,6 @@
 max_steps: 6
 num_sentences: 100
-task: "qa3_three-supporting-facts"  #"qa2_two-supporting-facts" #"qa1_single-supporting-fact"
+task: "qa2_two-supporting-facts" #"qa1_single-supporting-fact"  "qa3_three-supporting-facts"
 noise_train_path: "../datasets/babilong/pg19-with-sentences/train"
 noise_test_path: "../datasets/babilong/pg19-with-sentences/test"
 facts_train_path: "../datasets/babilong/babi/en-10k/${envs.task}_train.txt"
@@ -22,8 +22,7 @@ positions_processor_dict:
     _target_: envs.text_env.RelativePositionProcessor
     step_size: 20
 
-
-train_dataset: 
+train_dataset:
   _target_: envs.RetrievalBabiLong
   num_sentences: ${envs.num_sentences}
 
@@ -37,7 +36,7 @@ train_dataset:
       _target_: datasets.load_from_disk
       dataset_path: ${envs.noise_train_path}
 
-test_dataset: 
+test_dataset:
   _target_: envs.RetrievalBabiLong
   num_sentences: ${envs.num_sentences}
 
@@ -57,12 +56,12 @@ env:
   max_steps: ${envs.max_steps}
   action_embed_length: ${max_action_length}
   max_action_length_in_memory: ${max_action_length_in_memory}
-  separator: " [SEP] "        
+  separator: " [SEP] "
   sort_by_index: True
   positions_processor: ${envs.positions_processor_dict.${envs.positions_processor}}
   feedback_model: ${feedback.feedback_dict.${feedback.type}}
-#    _target_: rl.feedback.GroundTruthFeedback
-#    penalize_extra_steps: False
+  #    _target_: rl.feedback.GroundTruthFeedback
+  #    penalize_extra_steps: False
   #reward_model:
   #  _target_: envs.qa_env.PositionalGTReward
   # Dataset Configuration
@@ -70,13 +69,12 @@ env:
     _target_: envs.QADatasetAdapter
     dataset: ${envs.train_dataset}
 
-
 test_env:
   _target_: envs.qa_env.QAEnv
   max_steps: ${envs.env.max_steps}
   action_embed_length: ${max_action_length}
   max_action_length_in_memory: ${max_action_length_in_memory}
-  separator: ${envs.env.separator}       
+  separator: ${envs.env.separator}
   sort_by_index: ${envs.env.sort_by_index}
   positions_processor: ${envs.env.positions_processor}
   feedback_model:
@@ -87,4 +85,3 @@ test_env:
   dataset:
     _target_: envs.QADatasetAdapter
     dataset: ${envs.test_dataset}
-

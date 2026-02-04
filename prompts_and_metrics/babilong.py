@@ -40,26 +40,6 @@ def get_formatted_input(context, question, examples, instruction, post_prompt, t
 
 
 DEFAULT_PROMPTS = {
-    'qa1': {
-        'instruction':
-            'I will give you context with the facts about positions of different persons hidden in some random text '
-            'and a question. You need to answer the question based only on the information from the facts. '
-            'If a person was in different locations, use the latest location to answer the question.',
-        'examples':
-            '<example>\n'
-            'Charlie went to the hallway. Judith come back to the kitchen. Charlie travelled to balcony. '
-            'Where is Charlie?\n'
-            'Answer: The most recent location of Charlie is balcony.\n'
-            '</example>\n\n'
-            '<example>\n'
-            'Alan moved to the garage. Charlie went to the beach. Alan went to the shop. Rouse '
-            'travelled to balcony. Where is Alan?\n'
-            'Answer: The most recent location of Alan is shop.\n'
-            '</example>',
-        'post_prompt':
-            'Always return your answer in the following format: '
-            'The most recent location of ’person’ is ’location’. Do not write anything else after that.'
-    },
     'niah': {
         'instruction':
             'I will give you context with a special magic uuid hidden within the context'
@@ -87,6 +67,26 @@ DEFAULT_PROMPTS = {
         'post_prompt':
             'Always return your answer in the following format: '
             'The magic numbers are n1,n2,n3,n4. Split the numbers by coma(,) sumbol only without extra spases or and wird. Do not write anything else after that.'
+    },
+    'qa1': {
+        'instruction':
+            'I will give you context with the facts about positions of different persons hidden in some random text '
+            'and a question. You need to answer the question based only on the information from the facts. '
+            'If a person was in different locations, use the latest location to answer the question.',
+        'examples':
+            '<example>\n'
+            'Charlie went to the hallway. Judith come back to the kitchen. Charlie travelled to balcony. '
+            'Where is Charlie?\n'
+            'Answer: The most recent location of Charlie is balcony.\n'
+            '</example>\n\n'
+            '<example>\n'
+            'Alan moved to the garage. Charlie went to the beach. Alan went to the shop. Rouse '
+            'travelled to balcony. Where is Alan?\n'
+            'Answer: The most recent location of Alan is shop.\n'
+            '</example>',
+        'post_prompt':
+            'Always return your answer in the following format: '
+            'The most recent location of ’person’ is ’location’. Do not write anything else after that.'
     },
     'qa2': {
         'instruction':
@@ -578,7 +578,7 @@ TASK_LABELS = {
 }
 
 
-class BabilongPromptFormatter:
+class QAPromptFormatter:
 
     def __init__(self, babi_task):
         super().__init__()

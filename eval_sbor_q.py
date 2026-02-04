@@ -22,6 +22,21 @@ from rl.agents.pqn import PQN  # noqa: E402
 from envs.qa_env import QAEnv  # noqa: E402
 
 
+
+class NumpyEncoder(json.JSONEncoder):
+    """自定义JSON编码器处理NumPy类型"""
+    def default(self, obj):
+        if isinstance(obj, np.integer):
+            return int(obj)
+        elif isinstance(obj, np.floating):
+            return float(obj)
+        elif isinstance(obj, np.ndarray):
+            return obj.tolist()
+        elif isinstance(obj, np.bool_):
+            return bool(obj)
+        return super().default(obj)
+
+
 # ---------------------------------------------------------------------------
 # Utility functions
 # ---------------------------------------------------------------------------
@@ -173,6 +188,7 @@ def collect_episode_stats(env: QAEnv, agent: PQN, sample=None) -> dict:
     
     actions = []
     q_values = []
+    rewards = []
     
     done = False
     while not done:
@@ -184,14 +200,16 @@ def collect_episode_stats(env: QAEnv, agent: PQN, sample=None) -> dict:
             state, embeds["rope"], embeds_target["rope"], random=False, evaluate=True
         )
         
-        state, _, _, done = env.step(action)
+        state, _, r, done = env.step(action)
         
         # Сохраняем сырые данные (конвертируем в float/int для JSON)
         q_values.append(float(qval.max().cpu().numpy()))
         actions.append(int(action))
+        rewards.append(float(r))
 
     # Возвращаем структуру для сохранения
     return {
+        "rewards": rewards,
         "q_values": q_values,          # Список Q-значений для каждого шага
         "pred_idx": actions,            # Список выбранных индексов чанков
         "sf_idx": list(env.references_idx), # Список правильных чанков (Ground Truth)
@@ -202,14 +220,14 @@ def collect_episode_stats(env: QAEnv, agent: PQN, sample=None) -> dict:
 def load_eval_config(name):
     cli_cfg = OmegaConf.from_cli()
     eval_cfg = OmegaConf.load(name)
-    eval_cfg = OmegaConf.merge(eval_cfg, cli_cfg)
+    # eval_cfg = OmegaConf.merge(eval_cfg, cli_cfg)
 
     train_cfg_path = os.path.join(eval_cfg.pretrained_path, 'config.yaml')
     if not os.path.exists(train_cfg_path):
         raise FileNotFoundError(f"Could not find config.yaml at {train_cfg_path}")
     train_cfg = OmegaConf.load(train_cfg_path)
     #prepare_eval_config(eval_cfg, train_cfg)
-    cfg = OmegaConf.merge(train_cfg, eval_cfg)
+    cfg = OmegaConf.merge(train_cfg, eval_cfg, cli_cfg)
     OmegaConf.resolve(cfg)
     return cfg
 
@@ -249,18 +267,34 @@ def main(argv: List[str] | None = None) -> None:
 
     #Сбор данных (Inference)
     # ==========================================
-    jsonl_file = cfg.pretrained_path + "/episode_logs_hotpotqa.jsonl"
+    jsonl_file = cfg.pretrained_path + "/episode_logs_q.jsonl"
     print(f"Collecting stats into {jsonl_file}...")
 
     with open(jsonl_file, "w") as f_out:
         for i in tqdm(range(cfg.num_samples), desc="Inference", ncols=80):
             sample = env_test.dataset[i]
             # Запускаем БЕЗ q_border, собираем полный эпизод
-            stats = collect_episode_stats(env_test, agent, sample=sample)
-            stats["chunks"] = sample["chunks"]
-            stats["question"] = sample["question"]
-            stats["answer"] = sample["answer"]
-            f_out.write(json.dumps(stats) + "\n")
+            res = collect_episode_stats(env_test, agent, sample=sample)
+            # stats["id"] = i
+            # # stats["pred_texts"] = sample["chunks"]
+            # stats["question"] = sample["question"]
+            # stats["answer"] = sample["answer"]
+
+            entry = {
+                "id": sample["id"],
+                "question": sample["question"],
+                "answer": sample["answer"],
+                "sf_idx": [int(idx) for idx in sample["sf_idx"]],
+                "pred_idx": res["pred_idx"],
+                "sf_texts": [sample["chunks"][idx] for idx in sample["sf_idx"]],
+                "pred_texts": [sample["chunks"][idx] for idx in res["pred_idx"]],
+                "q_values": res["q_values"],
+                "return": 0,
+                "text_len": 10,
+                "f1": 0,
+                "em": 0,
+            }
+            f_out.write(json.dumps(entry, cls=NumpyEncoder) + "\n")
 
 
 if __name__ == "__main__":

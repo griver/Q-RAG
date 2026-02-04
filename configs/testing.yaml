@@ -1,16 +1,18 @@
-pretrained_path: ??? #set this parameter via CLI in eval_pqn.py
+pretrained_path: "/home/jovyan/nazar/multi-step-retrieval-rl/runs/Dec03_12-03-43_QRAG_qa2_two-supporting-facts"
 num_samples: 1000
 use_last: False
 
 #you can also rewrite any parameter from training config in this config:
 seed: 42
-device: 'cuda:0'
+device: 'cuda:2'
 random_sampling: false #choice: if true then samples are choosen randomly
 envs:
   num_sentences: 50
   #max_steps: 6
   #max_chunks_count: 2000
-
+  # test_env:
+  #   feedback_model: ${feedback.feedback_dict.babilong_em}
+    
 
 
 
