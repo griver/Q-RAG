@@ -18,11 +18,12 @@ import sys
 
 
 # eval_retrieval.py generates a json file with extracted chunks; the path to this file should be inserted here.
-file_path = "/mnt/CheckPoints/GTE_Hotpotqa+Musique/eval_seed42_ns50.jsonl"
-output_file_path = "/mnt/CheckPoints/GTE_Hotpotqa+Musique/eval_Qwen3-14B.json"
+file_path = "/mnt/CheckPoints/E5_Hotpotqa/128K_ms1.jsonl"
+output_file_path = "/mnt/CheckPoints/E5_Hotpotqa/eval_llm.json"
 
-#model_name = "/mnt/Phi-3.5-mini-instruct"
-model_name = "/mnt/Qwen3-14B"
+model_name = "/mnt/Qwen3-8B"
+#model_name = "/mnt/Qwen3-14B"
+#model_name = "/mnt/Qwen3-32B"
 #model_name = "/mnt/QwQ-32B"
 
 
@@ -34,12 +35,12 @@ with open(file_path, "r", encoding="utf-8") as f:
 
 print(f"Samples in dataset: {len(dataset)}")
 
-os.environ["VLLM_USE_TORCH_COMPILE"] = "0"
-os.environ["TORCH_COMPILE_DISABLE"] = "1"
-os.environ["VLLM_DISABLE_CUDA_GRAPHS"] = "1"
+#os.environ["VLLM_USE_TORCH_COMPILE"] = "0"
+#os.environ["TORCH_COMPILE_DISABLE"] = "1"
+#os.environ["VLLM_DISABLE_CUDA_GRAPHS"] = "1"
 
-sys.path.append(os.path.abspath('/trinity/home/a.anokhin/stage_2/pqn/pqn_qa/multi-step-retrieval-rl-pqn-qa'))
 
+'''
 qa_instruction_prompt = """You are a question-answer long-context system.
 Carefully read all context, pay attention on crucial facts and accurately answer the given question.
 Your answer must be a short and direct answer to the QUESTION.
@@ -57,6 +58,24 @@ QUESTION:
 {question}
 
 YOUR ANSWER: """
+'''
+
+
+qa_instruction_prompt = """Answer the question based on the given passages.
+Only give me the short and precise answer, do not output any other words.
+Keep your reasoning very brief and concise.
+Always end your response with "Final answer: [your final answer]".
+"""
+qa_prompt = """
+GIVEN PASSAGES:
+{context}
+
+QUESTION:
+{question}
+
+Final answer: """
+
+
 
 # def build_messages(prompt):
 #     messages = [
