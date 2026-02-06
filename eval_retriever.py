@@ -111,13 +111,14 @@ def evaluate_episode(env: QAEnv, agent: PQN, sample=None) -> dict:
     episode_return = 0.0
 
     num_steps = 0
+    q_values = []
     while not done:
 
         embeds = env.update_embeds(embeds, agent.critic.action_embed)
         embeds_target = env.update_embeds(embeds_target, agent.action_embed_target)
 
         #actions, _, _ = agent.select_n_actions(..., num_actions=K)
-        action, _, _ = agent.select_action(
+        action, q, _ = agent.select_action(
             state,
             embeds["rope"], embeds_target["rope"],
             random=False,
@@ -125,6 +126,8 @@ def evaluate_episode(env: QAEnv, agent: PQN, sample=None) -> dict:
         )
         state, _, reward, done = env.step(action)
         episode_return += reward
+        q_max = q.max()
+        q_values.append(float(q_max))
         num_steps += 1
 
     pred_sf = [int(i) for i in state.item_ids]
@@ -137,6 +140,7 @@ def evaluate_episode(env: QAEnv, agent: PQN, sample=None) -> dict:
         'f1': f1,
         'em': em,
         'pred_idx': pred_sf,
+        'q_values': q_values,
         'num_steps': num_steps
     }
 
@@ -250,6 +254,7 @@ def main(argv: List[str] | None = None) -> None:
             "answer": sample["answer"],
             "sf_idx": [int(idx) for idx in sample["sf_idx"]],
             "pred_idx": res["pred_idx"],
+            "q_values": res["q_values"],
             "sf_texts": [sample["chunks"][idx] for idx in sample["sf_idx"]],
             "pred_texts": [sample["chunks"][idx] for idx in res["pred_idx"]],
             "return": res["return"],
