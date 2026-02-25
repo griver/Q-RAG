@@ -31,18 +31,18 @@ Q-RAG achieves **state-of-the-art results** on long-context benchmarks (**BabiLo
 ### Results
 #### RULER benchmark (Table 1)
 Q-RAG achieves near-perfect retrieval on all NIAH subtasks, trained on 4K-length documents and generalizing up to 1M tokens:
-| Context length | NIAH S1 | NIAH S2 | NIAH S3 | NIAH MK1 | NIAH MV | NIAH MQ | NIAH Avg | Multi-hop QA |
-|----------------|---------|---------|---------|---------|---------|---------|----------|--------------|
-| 4K  | 100 | 100 | 100 | 100 | 100 | 100 | **100** | 67 |
-| 16K | 100 | 100 | 100 | 100 | 100 | 100 | **100** | 67 |
-| 32K | 100 | 100 | 100 | 100 | 100 | 100 | **100** | 67 |
-| 128K | 100 | 100 | 100 | 100 | 100 | 100 | **100** | 62 |
-| 1M  | 100 | 100 | 100 | 100 | 100 | 100 | **99.7** | 57 |
+
+<p align="center">
+  <img src="images/Ruler.png" width="96%" />
+</p>
+
 #### Open-domain QA (Table 2)
 Results on HotpotQA (in-domain) and Musique (out-of-distribution). QwQ-32B was used as the reader LLM for Q-RAG and Beam Retriever:
-| Method | HotpotQA Answer F1 | HotpotQA Fact F1 | Musique Answer F1 | Musique Fact F1 |
-|--------|--------------------|--------------------|---------------------|-------------------|
-| **Q-RAG** (ours) | **0.76** | **0.95** | **0.52** | **0.71** |
+
+<p align="center">
+  <img src="images/OpenQA.png" width="96%" />
+</p>
+
 #### BabiLong benchmark
 Q-RAG achieves the highest average performance across 5 tasks (QA1–QA5) at context lengths from 1M to 10M tokens, outperforming Titans, Atlas, ARMT, RMT, and proprietary LLMs. On the hardest subtask **QA3** (3-hop temporal reasoning), Q-RAG shows virtually **no degradation** as context grows to 10M tokens, while all baselines degrade significantly.
 
