@@ -149,7 +149,7 @@ python train_q_rag.py
 
 **Models per benchmark:**
 - BabiLong & RULER → `facebook/contriever`
-- HotpotQA & Musique → `intfloat/multilingual-e5-large` and 'Alibaba-NLP/gte-multilingual-base'
+- HotpotQA & Musique → `intfloat/multilingual-e5-large` and `Alibaba-NLP/gte-multilingual-base`
 
 ### 3. Evaluation
 
