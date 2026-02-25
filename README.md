@@ -92,6 +92,19 @@ Download all datasets (HotpotQA, Musique, BabiLong) from [Google Drive](https://
 
 Place the downloaded data so that the environment configs can find them. Default paths are set in the corresponding config files under `configs/envs/`.
 
+#### BabiLong Chunking Pipeline
+
+In BabiLong, **each chunk is a single sentence** (not a fixed-size text block). The pipeline works as follows:
+
+1. **`TaskDataset`** parses bAbI task files → extracts `facts` (sentence-level), `question`, `answer`, and `references_idx` (indices of supporting facts).
+2. **`RetrSentenceSampler`** samples random sentences from PG19 books as **noise**.
+3. **`RetrievalBabiLong`** assembles the final chunk list:
+   - `num_noise = num_chunks − num_facts`
+   - `shuffle(noise, facts)` — inserts facts at random positions among noise, **preserving the relative order of facts**.
+4. **`QADatasetAdapter`** passes the pre-built `sample['chunks']` directly (no additional splitting).
+
+The total number of chunks is controlled by the `num_chunks` / `num_sentences` parameter. The agent's task is to find the supporting facts among all chunks.
+
 ### 2. Training
 
 Training is launched via `train_q_rag.py`. All hyperparameters are managed by [Hydra](https://hydra.cc/) configs in `configs/`.
