@@ -207,6 +207,21 @@ CUDA_VISIBLE_DEVICES=0 python eval_llm.py \
 
 > **Config priority:** `CLI args` > `configs/testing.yaml` > `pretrained_path/config.yaml`
 
+Evaluate an LLM on the retriever's with optimal q_value (0.5) for BabiLong tasks:
+
+```bash
+CUDA_VISIBLE_DEVICES=0 python eval_llm.py \
+  retriever_logdir/retriever_logs.jsonl \
+  --llm_name "Qwen/Qwen3-4B" \
+  --babi_task qa5 \ #qa5-etc....
+  --chunk_filter qvalue \
+  --stopping_threshold 0.5
+```
+
+**Note:** for evaluate an LLM on the retriever's with optimal q_value=0.5:
+- in script train_q_rag set max_steps=6, penalize_extra_steps=True and never_terminate=True
+- in script eval_retriever.py set paramert never_terminate=True
+
 ---
 
 ## 📂 Repository Structure

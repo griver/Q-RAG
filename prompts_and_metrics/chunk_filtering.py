@@ -86,8 +86,18 @@ class QValueChunkFilter(ChunkFilter):
 
         return self._format_output(pred_idx[:i], pred_texts[:i])
 
+@dataclass
+class RetrievalStepChunkFilter(ChunkFilter):
+    """
+    Limit the number of retrieved chunks to first N steps.
+    """
 
+    max_steps: int = 1 
 
+    def __call__(self, retriever_results: Dict) -> Dict[str, List]:
+        pred_idx, pred_texts = self._get_predicted_chunks(retriever_results)
+        cutoff = min(self.max_steps, len(pred_idx))
+        return self._format_output(pred_idx[:cutoff], pred_texts[:cutoff])
 
 class NoChunkFilter(ChunkFilter):
     """Return retriever-selected chunks unchanged."""
@@ -139,6 +149,7 @@ _FILTERS = {
     "no_noise": NoNoiseChunkFilter,
     "llm": LLMChunkFilter,
     "qvalue": QValueChunkFilter,
+    "retrieval_step": RetrievalStepChunkFilter,
 }
 
 
@@ -160,5 +171,6 @@ __all__ = [
     "NoChunkFilter",
     "LLMChunkFilter",
     "QValueChunkFilter",
+    "RetrievalStepChunkFilter",
     "build_chunk_filter",
 ]
