@@ -79,7 +79,7 @@ pip install hydra-core tensorboard rotary-embedding-torch pandas nltk sortedcont
 ### Smoke test
 
 ```bash
-python -c "from rl.agents.pqn import PQNAgent; print('✅ Q-RAG installed successfully')"
+python -c "from rl.agents.pqn import PQNActor; print('✅ Q-RAG installed successfully')"
 ```
 
 ---
