@@ -215,17 +215,17 @@ Training for BabiLong tasks:
 
 ```bash
 CUDA_VISIBLE_DEVICES=0 python train_q_rag.py \
-  --eval_interval=500 \ 
-  --eval_episodes=1000 \
-  --batch_size=64 \
-  --accumulate_grads=1 \ 
-  --max_action_length=64 \
-  --max_action_length_in_memory=64 \
-  --feedback.ground_truth.penalize_extra_steps=True \
-  --feedback.never_terminate=True \
-  --envs_parallel=1 \
-  --logger.log_dir=runs/q_value_early_stop \
-  --envs.task="qa5" #"qa5-etc...."
+  eval_interval=500 \ 
+  eval_episodes=1000 \
+  batch_size=64 \
+  accumulate_grads=1 \ 
+  max_action_length=64 \
+  max_action_length_in_memory=64 \
+  feedback.ground_truth.penalize_extra_steps=True \
+  feedback.never_terminate=True \
+  envs_parallel=1 \
+  logger.log_dir=runs/q_value_early_stop \
+  envs.task="qa5" #"qa5-etc...."
 ```
 Retriever evaluation with collecting all q_value for BabiLong tasks:
 
@@ -243,10 +243,10 @@ Evaluate an LLM on the retriever's with filtering optimal q_value (0.5) for Babi
 ```bash
 CUDA_VISIBLE_DEVICES=0 python eval_llm.py \
   retriever_logdir/retriever_logs.jsonl \
-  --llm_name "Qwen/Qwen3-4B" \
-  --babi_task qa5 \ #qa5-etc....
-  --chunk_filter qvalue \
-  --stopping_threshold 0.5
+  llm_name "Qwen/Qwen3-4B" \
+  babi_task qa5 \ #qa5-etc....
+  chunk_filter qvalue \
+  stopping_threshold 0.5
 ```
 
 ---
