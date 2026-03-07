@@ -208,7 +208,37 @@ CUDA_VISIBLE_DEVICES=0 python eval_llm.py \
 
 > **Config priority:** `CLI args` > `configs/testing.yaml` > `pretrained_path/config.yaml`
 
-Evaluate an LLM on the retriever's with optimal q_value (0.5) for BabiLong tasks:
+
+#### Experiments with BabiLong tasks with optimal q_value (0.5):
+
+Training for BabiLong tasks:
+
+```bash
+CUDA_VISIBLE_DEVICES=0 python train_q_rag.py \
+  --eval_interval=500 \ 
+  --eval_episodes=1000 \
+  --batch_size=64 \
+  --accumulate_grads=1 \ 
+  --max_action_length=64 \
+  --max_action_length_in_memory=64 \
+  --feedback.ground_truth.penalize_extra_steps=True \
+  --feedback.never_terminate=True \
+  --envs_parallel=1 \
+  --logger.log_dir=runs/q_value_early_stop \
+  --envs.task="qa5" #"qa5-etc...."
+```
+Retriever evaluation with collecting all q_value for BabiLong tasks:
+
+```bash
+CUDA_VISIBLE_DEVICES=0 python eval_retriever.py \
+    pretrained_path="PRETRAINED_PATH" \
+    envs.num_sentences=1200 \ # 50:1k,  160:4k, 1200:32k, 4600:128k, 40000:1kk
+    num_samples=-1 \
+    +envs.test_env.feedback_model.never_terminate=True \
+    seed=42
+```
+
+Evaluate an LLM on the retriever's with filtering optimal q_value (0.5) for BabiLong tasks:
 
 ```bash
 CUDA_VISIBLE_DEVICES=0 python eval_llm.py \
@@ -218,10 +248,6 @@ CUDA_VISIBLE_DEVICES=0 python eval_llm.py \
   --chunk_filter qvalue \
   --stopping_threshold 0.5
 ```
-
-**Note:** for evaluate an LLM on the retriever's with optimal q_value=0.5:
-- in script train_q_rag set max_steps=6, penalize_extra_steps=True and never_terminate=True
-- in script eval_retriever.py set paramert never_terminate=True
 
 ---
 
