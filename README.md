@@ -15,6 +15,8 @@
 
 Q-RAG achieves **state-of-the-art results** on long-context benchmarks (**BabiLong**, **RULER**) for contexts up to **10M tokens** and competitive performance on open-domain multi-hop QA (**HotpotQA**, **Musique**) — all trained on a **single A100 GPU**.
 
+⚠️ Note: This codebase is currently under active debugging and refactoring. 
+
 ---
 
 ## 🔗 Links
