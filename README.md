@@ -234,7 +234,6 @@ CUDA_VISIBLE_DEVICES=0 python eval_retriever.py \
     pretrained_path="PRETRAINED_PATH" \
     envs.num_sentences=1200 \ # 50:1k,  160:4k, 1200:32k, 4600:128k, 40000:1kk
     num_samples=-1 \
-    +envs.test_env.feedback_model.never_terminate=True \
     seed=42
 ```
 
