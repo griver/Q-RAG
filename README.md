@@ -11,9 +11,16 @@
 
 </div>
 
+<div align="center">
+
+### ⚠️ Note: This codebase is currently under active debugging and refactoring. 
+
+</div>
+
 **Q-RAG** is a resource-efficient method for **multi-step retrieval** trained with reinforcement learning directly in the latent space of text-chunk embeddings. Instead of expensive LLM fine-tuning, Q-RAG trains only a lightweight embedder agent using value-based RL (temporal difference learning), keeping the LLM frozen. This repository provides the full training and evaluation code to reproduce the results from the paper.
 
 Q-RAG achieves **state-of-the-art results** on long-context benchmarks (**BabiLong**, **RULER**) for contexts up to **10M tokens** and competitive performance on open-domain multi-hop QA (**HotpotQA**, **Musique**) — all trained on a **single A100 GPU**.
+ 
 
 ---
 
@@ -207,20 +214,45 @@ CUDA_VISIBLE_DEVICES=0 python eval_llm.py \
 
 > **Config priority:** `CLI args` > `configs/testing.yaml` > `pretrained_path/config.yaml`
 
-Evaluate an LLM on the retriever's with optimal q_value (0.5) for BabiLong tasks:
+
+#### Experiments with BabiLong tasks with optimal q_value (0.5):
+
+Training for BabiLong tasks:
+
+```bash
+CUDA_VISIBLE_DEVICES=0 python train_q_rag.py \
+  eval_interval=500 \ 
+  eval_episodes=1000 \
+  batch_size=64 \
+  accumulate_grads=1 \ 
+  max_action_length=64 \
+  max_action_length_in_memory=64 \
+  feedback.ground_truth.penalize_extra_steps=True \
+  feedback.never_terminate=True \
+  envs_parallel=1 \
+  logger.log_dir=runs/q_value_early_stop \
+  envs.task="qa5" #"qa5-etc...."
+```
+Retriever evaluation with collecting all q_value for BabiLong tasks:
+
+```bash
+CUDA_VISIBLE_DEVICES=0 python eval_retriever.py \
+    pretrained_path="PRETRAINED_PATH" \
+    envs.num_sentences=1200 \ # 50:1k,  160:4k, 1200:32k, 4600:128k, 40000:1kk
+    num_samples=-1 \
+    seed=42
+```
+
+Evaluate an LLM on the retriever's with filtering optimal q_value (0.5) for BabiLong tasks:
 
 ```bash
 CUDA_VISIBLE_DEVICES=0 python eval_llm.py \
   retriever_logdir/retriever_logs.jsonl \
-  --llm_name "Qwen/Qwen3-4B" \
-  --babi_task qa5 \ #qa5-etc....
-  --chunk_filter qvalue \
-  --stopping_threshold 0.5
+  llm_name "Qwen/Qwen3-4B" \
+  babi_task qa5 \ #qa5-etc....
+  chunk_filter qvalue \
+  stopping_threshold 0.5
 ```
-
-**Note:** for evaluate an LLM on the retriever's with optimal q_value=0.5:
-- in script train_q_rag set max_steps=6, penalize_extra_steps=True and never_terminate=True
-- in script eval_retriever.py set paramert never_terminate=True
 
 ---
 
