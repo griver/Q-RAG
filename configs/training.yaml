@@ -11,7 +11,7 @@ learning_start: 200
 steps_count: 50_000
 batch_size: 64
 accumulate_grads: 2
-eval_interval: 100
+eval_interval: 500
 eval_episodes: 300
 envs_parallel: 4
 max_action_length: 256
