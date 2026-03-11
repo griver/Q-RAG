@@ -578,8 +578,10 @@ TASK_LABELS = {
 }
 
 
-class QAPromptFormatter:
-
+class BabilongPromptFormatter:
+    # This class is used to generate prompts for the Babilong and RULER datasets.
+    # To avoid digging through the configs of older checkpoints, we will keep the name
+    # BabilongPromptFormatter for now.
     def __init__(self, babi_task):
         super().__init__()
         self.babi_task = babi_task.split('_')[0] #qa2_two-supporting-facts_test -> qa2, qa2 -> qa2
