@@ -16,8 +16,9 @@ def get_dataset_df(dataset_path, max_n_facts=None):
     df.text = df.text.apply(lambda x: x[x.index(' ') + 1:])
     df['answer'] = df.text.apply(lambda x: x[x.index('\t') + 1:] if '\t' in x else None)
     # df['reference_num'] = df.answer.apply(lambda x: x if x is None else x.split('\t| ')[1:])
-    df['reference_num'] = df.answer.apply(lambda x: x if x is None else [int(n) for n in re.split('\t| ', x)[1:]])
-    df.answer = df.answer.apply(lambda x: x if x is None else x.split('\t')[0])
+    #fix: changed x `if x is None` to `x if pd.isna(x)`,cause old version dont work with new pandas
+    df['reference_num'] = df.answer.apply(lambda x: x if pd.isna(x) else [int(n) for n in re.split('\t| ', x)[1:]])
+    df.answer = df.answer.apply(lambda x: x if pd.isna(x) else x.split('\t')[0])
     df.text = df.text.apply(lambda x: x.split('\t')[0] if '\t' in x else x)
 
     # mark each sample
