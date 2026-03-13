@@ -178,17 +178,11 @@ python train_q_rag.py
 `eval_retriever.py` evaluates a pretrained retriever checkpoint and writes logs to the model's folder as `eval_seed{seed}_ns{num_sentences}.jsonl`.
 
 ```bash
-# Single context length
-python eval_retriever.py \
-  pretrained_path=runs/<run_name> \
-  envs.num_sentences=1200 \
-  num_samples=200
-
 # HotpotQA
 python eval_retriever.py \
   pretrained_path=runs/<run_name> \
   num_samples=-1 \
-  envs.max_steps=3
+  envs.max_steps=2
 ```
 
 **Multi-length BabiLong sweep** (1K → 1M tokens):
@@ -197,7 +191,7 @@ python eval_retriever.py \
 ./scripts/eval_retriever_babilong.sh runs/<run_name> 0 42
 ```
 
-#### LLM evaluation (end-to-end)
+#### LLM evaluation
 
 Evaluate an LLM on the retriever's output logs:
 
