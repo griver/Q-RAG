@@ -231,7 +231,7 @@ CUDA_VISIBLE_DEVICES=0 python train_q_rag.py \
   feedback.never_terminate=True \
   envs_parallel=1 \
   logger.log_dir=runs/q_value_early_stop \
-  envs.task="qa5" #"qa5-etc...."
+  envs.task="qa3_three-supporting-facts"
 ```
 Retriever evaluation with collecting all q_value for BabiLong tasks:
 
