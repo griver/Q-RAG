@@ -93,15 +93,80 @@ python -c "from rl.agents.pqn import PQNActor; print('✅ Q-RAG installed succes
 
 ## 🔬 Reproducibility
 
-### 1. Data Preparation
+> **General notes:**
+> - Training is launched via `train_q_rag.py`. All hyperparameters are managed by [Hydra](https://hydra.cc/) configs in `configs/`.
+> - Download datasets from [Google Drive](https://drive.google.com/drive/folders/1UUIx-6vEBF9Mij81iVgPul86aXhdyxhG). Default paths are set in `configs/envs/`.
+> - Results may vary slightly across seeds. All training was performed on a single A100-80GB GPU within 12 hours per model.
+> - **Config priority:** `CLI args` > `configs/testing.yaml` > `pretrained_path/config.yaml`
 
-Download all datasets (HotpotQA, Musique, BabiLong) from [Google Drive](https://drive.google.com/drive/folders/1UUIx-6vEBF9Mij81iVgPul86aXhdyxhG).
 
-Place the downloaded data so that the environment configs can find them. Default paths are set in the corresponding config files under `configs/envs/`.
+**Models per benchmark:**
+- BabiLong & RULER → `facebook/contriever`
+- HotpotQA & Musique → `intfloat/multilingual-e5-large` and `Alibaba-NLP/gte-multilingual-base`
 
-#### BabiLong Chunking Pipeline
+---
 
-In BabiLong, **each chunk is a single sentence** (not a fixed-size text block). The pipeline works as follows:
+### 1. OpenQA Benchmarks (HotpotQA / Musique)
+
+#### Data Preparation
+
+Download HotpotQA and Musique datasets from [Google Drive](https://drive.google.com/drive/folders/1UUIx-6vEBF9Mij81iVgPul86aXhdyxhG) and place them so that the environment configs can find them. Default paths are set in `configs/envs/hotpotqa.yaml`, `configs/envs/musique.yaml`, and `configs/envs/hotpotqa+musique.yaml`.
+
+#### Training
+
+**HotpotQA only:**
+
+```bash
+python train_q_rag.py \
+  envs=hotpotqa \
+  max_action_length=220 \
+  envs.max_steps=2 \
+  batch_size=16 \
+  accumulate_grads=2 \
+  eval_episodes=100
+```
+
+**HotpotQA + Musique (combined, GTE embedder):**
+
+```bash
+python train_q_rag.py \
+  algo=pqn_gte \
+  envs=combined \
+  batch_size=16
+```
+
+> **Note:** `max_action_length` and `max_action_length_in_memory` may need adjustment depending on the dataset, GPU memory, and the model’s context window.
+
+#### Evaluation
+
+**Retriever evaluation:**
+
+`eval_retriever.py` evaluates a pretrained retriever checkpoint and writes logs to the model's folder as `eval_seed{seed}_ns{num_sentences}.jsonl`.
+
+```bash
+python eval_retriever.py \
+  pretrained_path=runs/<run_name> \
+  num_samples=-1 \
+  envs.max_steps=2
+```
+
+**LLM evaluation:**
+
+```bash
+CUDA_VISIBLE_DEVICES=0 python eval_llm.py \
+  retriever_logdir/retriever_logs.jsonl \
+  --llm_name "Qwen/Qwen3-4B"
+```
+
+---
+
+### 2. BabiLong
+
+#### Data Preparation
+
+Download BabiLong data from [Google Drive](https://drive.google.com/drive/folders/1UUIx-6vEBF9Mij81iVgPul86aXhdyxhG). Default paths are set in `configs/envs/babilong.yaml`.
+
+**Chunking pipeline:** In BabiLong, **each chunk is a single sentence** (not a fixed-size text block). The pipeline works as follows:
 
 1. **`TaskDataset`** parses bAbI task files → extracts `facts` (sentence-level), `question`, `answer`, and `references_idx` (indices of supporting facts).
 2. **`RetrSentenceSampler`** samples random sentences from PG19 books as **noise**.
@@ -112,11 +177,7 @@ In BabiLong, **each chunk is a single sentence** (not a fixed-size text block). 
 
 The total number of chunks is controlled by the `num_chunks` / `num_sentences` parameter. The agent's task is to find the supporting facts among all chunks.
 
-### 2. Training
-
-Training is launched via `train_q_rag.py`. All hyperparameters are managed by [Hydra](https://hydra.cc/) configs in `configs/`.
-
-#### BabiLong
+#### Training
 
 ```bash
 # Example: QA2 task, 100 sentences, single GPU with 16 GB
@@ -127,104 +188,14 @@ python train_q_rag.py \
   accumulate_grads=3
 ```
 
-#### HotpotQA
-
-```bash
-python train_q_rag.py \
-  envs=hotpotqa \
-  max_action_length=140 \
-  envs.max_steps=3 \
-  batch_size=16 \
-  accumulate_grads=2 \
-  eval_episodes=100
-```
-
-#### HotpotQA + Musique (combined, GTE embedder)
-
-Edit `configs/training.yaml`:
-- `algo: pqn_gte`
-- `envs: combined`
-- `batch_size: 16` (for A100-80GB)
-
-Then run:
-
-```bash
-python train_q_rag.py
-```
-
-> **Note:** `max_action_length` and `max_action_length_in_memory` may need adjustment depending on the dataset and GPU memory.
-
-#### Training details (from the paper)
-
-| Parameter | Value |
-|-----------|-------|
-| Optimizer | AdamW (β₁=0.9, β₂=0.98, ε=10⁻⁶) |
-| Learning rate | 1.5 × 10⁻⁵ with linear warmup (1000 steps) + linear decay to 10% |
-| Weight decay | 5 × 10⁻⁴ |
-| Gradient clipping | ℓ₂ norm ≤ 2.0 |
-| Gradient accumulation | 8 steps (effective batch size = 96) |
-| γ / α / λ / τ | 0.99 / 0.05 / 0.5 / 0.02 |
-| Max action length | 220 tokens |
-| Training time | ≤ 12 hours on a single A100-80GB |
-
-**Models per benchmark:**
-- BabiLong & RULER → `facebook/contriever`
-- HotpotQA & Musique → `intfloat/multilingual-e5-large` and `Alibaba-NLP/gte-multilingual-base`
-
-### 3. Evaluation
-
-#### Retriever evaluation
-
-`eval_retriever.py` evaluates a pretrained retriever checkpoint and writes logs to the model's folder as `eval_seed{seed}_ns{num_sentences}.jsonl`.
-
-```bash
-# Single context length
-python eval_retriever.py \
-  pretrained_path=runs/<run_name> \
-  envs.num_sentences=1200 \
-  num_samples=200
-
-# HotpotQA
-python eval_retriever.py \
-  pretrained_path=runs/<run_name> \
-  num_samples=-1 \
-  envs.max_steps=3
-```
-
-**Multi-length BabiLong sweep** (1K → 1M tokens):
-
-```bash
-./scripts/eval_retriever_babilong.sh runs/<run_name> 0 42
-```
-
-#### LLM evaluation (end-to-end)
-
-Evaluate an LLM on the retriever's output logs:
-
-```bash
-# Single log file
-CUDA_VISIBLE_DEVICES=0 python eval_llm.py \
-  retriever_logdir/retriever_logs.jsonl \
-  --llm_name "Qwen/Qwen3-4B" \
-  --babi_task qa4
-
-# BabiLong multi-length sweep
-./scripts/eval_llm_babilong.sh path/to/retriever_logdir "Qwen/Qwen3-4B" "qa4" 0
-```
-
-> **Config priority:** `CLI args` > `configs/testing.yaml` > `pretrained_path/config.yaml`
-
-
-#### Experiments with BabiLong tasks with optimal q_value (0.5):
-
-Training for BabiLong tasks:
+**Training with optimal Q-value early stopping (q_value = 0.5):**
 
 ```bash
 CUDA_VISIBLE_DEVICES=0 python train_q_rag.py \
-  eval_interval=500 \ 
+  eval_interval=500 \
   eval_episodes=1000 \
   batch_size=64 \
-  accumulate_grads=1 \ 
+  accumulate_grads=1 \
   max_action_length=64 \
   max_action_length_in_memory=64 \
   feedback.ground_truth.penalize_extra_steps=True \
@@ -233,25 +204,86 @@ CUDA_VISIBLE_DEVICES=0 python train_q_rag.py \
   logger.log_dir=runs/q_value_early_stop \
   envs.task="qa3_three-supporting-facts"
 ```
-Retriever evaluation with collecting all q_value for BabiLong tasks:
+
+#### Evaluation
+
+**Retriever evaluation (single context length):**
+
+```bash
+python eval_retriever.py \
+  pretrained_path=runs/<run_name> \
+  envs.num_sentences=1200 \
+  num_samples=200
+```
+
+**Multi-length BabiLong sweep** (1K → 1M tokens):
+
+```bash
+./scripts/eval_retriever_babilong.sh runs/<run_name> 0 42
+```
+
+**Retriever evaluation with Q-value collection:**
 
 ```bash
 CUDA_VISIBLE_DEVICES=0 python eval_retriever.py \
     pretrained_path="PRETRAINED_PATH" \
-    envs.num_sentences=1200 \ # 50:1k,  160:4k, 1200:32k, 4600:128k, 40000:1kk
+    envs.num_sentences=1200 \
     num_samples=-1 \
     seed=42
 ```
 
-Evaluate an LLM on the retriever's with filtering optimal q_value (0.5) for BabiLong tasks:
+> Sentence-to-token mapping: `50→1k, 160→4k, 1200→32k, 4600→128k, 40000→1M`
+
+**LLM evaluation:**
+
+```bash
+# Single log file
+CUDA_VISIBLE_DEVICES=0 python eval_llm.py \
+  retriever_logdir/retriever_logs.jsonl \
+  --llm_name "Qwen/Qwen3-4B" \
+  --babi_task qa4
+
+# Multi-length sweep
+./scripts/eval_llm_babilong.sh path/to/retriever_logdir "Qwen/Qwen3-4B" "qa4" 0
+```
+
+**LLM evaluation with optimal Q-value filtering (0.5):**
 
 ```bash
 CUDA_VISIBLE_DEVICES=0 python eval_llm.py \
   retriever_logdir/retriever_logs.jsonl \
-  llm_name "Qwen/Qwen3-4B" \
-  babi_task qa5 \ #qa5-etc....
-  chunk_filter qvalue \
-  stopping_threshold 0.5
+  --llm_name "Qwen/Qwen3-4B" \
+  --babi_task qa5 \
+  --chunk_filter qvalue \
+  --stopping_threshold 0.5
+```
+
+---
+
+### 3. RULER
+
+#### Data Preparation
+
+Download RULER (NIAH) data from [Google Drive](https://drive.google.com/drive/folders/1UUIx-6vEBF9Mij81iVgPul86aXhdyxhG). Default paths are set in `configs/envs/niah.yaml`.
+
+#### Training
+
+```bash
+
+```
+
+#### Evaluation
+
+**Retriever evaluation:**
+
+```bash
+
+```
+
+**LLM evaluation:**
+
+```bash
+
 ```
 
 ---
