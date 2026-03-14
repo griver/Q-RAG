@@ -95,7 +95,12 @@ python -c "from rl.agents.pqn import PQNActor; print('✅ Q-RAG installed succes
 
 > **General notes:**
 > - Training is launched via `train_q_rag.py`. All hyperparameters are managed by [Hydra](https://hydra.cc/) configs in `configs/`.
-> - Download datasets from [Google Drive](https://drive.google.com/drive/folders/1UUIx-6vEBF9Mij81iVgPul86aXhdyxhG). Default paths are set in `configs/envs/`.
+> - Download datasets from [Google Drive](https://drive.google.com/drive/folders/1UUIx-6vEBF9Mij81iVgPul86aXhdyxhG). Default paths are set in `configs/envs/`. Dataset paths use relative paths (e.g., `../datasets/...`), so the `datasets/` folder must be placed **next to** the `Q-RAG` repository directory:
+>   ```
+>   parent_dir/
+>   ├── Q-RAG/      ← this repository
+>   └── datasets/   ← downloaded datasets go here
+>   ```
 > - Results may vary slightly across seeds. All training was performed on a single A100-80GB GPU within 12 hours per model.
 > - **Config priority:** `CLI args` > `configs/testing.yaml` > `pretrained_path/config.yaml`
 
