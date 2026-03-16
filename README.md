@@ -135,9 +135,18 @@ python train_q_rag.py \
 
 ```bash
 python train_q_rag.py \
-  algo=pqn_gte \
-  envs=combined \
-  batch_size=16
+algo=pqn_gte \
+envs=hotpotqa+musique \
+eval_interval=100 \
+eval_episodes=200 \
+max_action_length=512 \
+max_action_length_in_memory=256 \
+batch_size=16 \
+accumulate_grads=2 \
+feedback.ground_truth.penalize_extra_steps=True \
+feedback.never_terminate=True \
+envs_parallel=1 \
+envs.max_steps=6
 ```
 
 > **Note:** `max_action_length` and `max_action_length_in_memory` may need adjustment depending on the dataset, GPU memory, and the model’s context window.
