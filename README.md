@@ -151,7 +151,7 @@ envs.max_steps=6
 
 > **Note:** `max_action_length` and `max_action_length_in_memory` may need adjustment depending on the dataset, GPU memory, and the model’s context window.
 
-#### Evaluation
+#### Evaluation HotpotQA or MuSiQue
 
 **Retriever evaluation:**
 
