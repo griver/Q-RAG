@@ -159,10 +159,11 @@ envs.max_steps=6
 
 ```bash
 python eval_retriever.py \
-  pretrained_path=runs/<run_name> \
+  pretrained_path=./qrag-ft-e5-on-hotpotqa \
   num_samples=-1 \
-  envs.max_steps=2
+  +envs.max_steps=2
 ```
+
 
 **LLM evaluation:**
 
