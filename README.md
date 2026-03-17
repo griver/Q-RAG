@@ -155,7 +155,7 @@ envs.max_steps=6
 
 **Retriever evaluation:**
 
-`eval_retriever.py` evaluates a pretrained retriever checkpoint and writes logs to the model's folder as `eval_seed{seed}_ns{num_sentences}.jsonl`.
+`eval_retriever.py` evaluates a pretrained retriever checkpoint and writes logs to the model's folder as `eval_seed{seed}.jsonl`.
 
 **HotpotQA only**
 
