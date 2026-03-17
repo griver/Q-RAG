@@ -167,9 +167,7 @@ python eval_retriever.py \
 **LLM evaluation:**
 
 ```bash
-CUDA_VISIBLE_DEVICES=0 python eval_llm.py \
-  retriever_logdir/retriever_logs.jsonl \
-  --llm_name "Qwen/Qwen3-4B"
+python llm-answering-vllm.py     --file_path ./qrag-ft-e5-on-hotpotqa/eval_seed42.jsonl     --model_name Qwen/Qwen3-8B     --output_file_path ./qrag-ft-e5-on-hotpotqa/llm-answering_eval.json
 ```
 
 ---
