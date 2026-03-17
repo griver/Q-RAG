@@ -286,7 +286,7 @@ CUDA_VISIBLE_DEVICES=0 python eval_retriever.py \
 
 ```bash
 # Single log file
-CUDA_VISIBLE_DEVICES=0 python eval_llm.py \
+CUDA_VISIBLE_DEVICES=0 python eval_llm_synthetics.py \
   retriever_logdir/retriever_logs.jsonl \
   --llm_name "Qwen/Qwen3-4B" \
   --babi_task qa4
@@ -298,7 +298,7 @@ CUDA_VISIBLE_DEVICES=0 python eval_llm.py \
 **LLM evaluation with optimal Q-value filtering (0.5):**
 
 ```bash
-CUDA_VISIBLE_DEVICES=0 python eval_llm.py \
+CUDA_VISIBLE_DEVICES=0 python eval_llm_synthetics.py \
   retriever_logdir/retriever_logs.jsonl \
   --llm_name "Qwen/Qwen3-4B" \
   --babi_task qa5 \
@@ -342,7 +342,7 @@ Download RULER (NIAH) data from [Google Drive](https://drive.google.com/drive/fo
 Q-RAG/
 ├── train_q_rag.py              # Main training script
 ├── eval_retriever.py           # Retriever evaluation
-├── eval_llm.py                 # End-to-end LLM evaluation (BabiLong)
+├── eval_llm_synthetics.py      # LLM evaluation (BabiLong)
 ├── eval_llm_longbench.py       # LLM evaluation on LongBench
 ├── eval_sbor_q.py              # Q-value evaluation
 ├── eval_feedback.py            # Feedback model evaluation
