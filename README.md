@@ -134,6 +134,22 @@ python train_q_rag.py \
    max_action_length=220
 ```
 
+**MuSiQue only:**
+
+```bash
+python train_q_rag.py \
+  envs=musique \
+  algo=pqn_e5_musique \
+  envs.data_path="./datasets/data_sources/musique/" \
+  steps_count=10000 \
+  batch_size=12 \
+  accumulate_grads=8 \
+  eval_interval=100 \
+  envs_parallel=1 \
+  max_action_length=110
+```
+
+
 **HotpotQA + Musique (combined, GTE embedder):**
 
 ```bash
