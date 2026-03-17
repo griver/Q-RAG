@@ -167,7 +167,10 @@ python eval_retriever.py \
 **LLM evaluation:**
 
 ```bash
-python llm-answering-vllm.py     --file_path ./qrag-ft-e5-on-hotpotqa/eval_seed42.jsonl     --model_name Qwen/Qwen3-8B     --output_file_path ./qrag-ft-e5-on-hotpotqa/llm-answering_eval.json
+python llm-answering-vllm.py \
+     --file_path ./qrag-ft-e5-on-hotpotqa/eval_seed42.jsonl \
+     --model_name Qwen/Qwen3-8B \
+     --output_file_path ./qrag-ft-e5-on-hotpotqa/llm-answering_eval.json
 ```
 
 ---
