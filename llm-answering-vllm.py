@@ -1,5 +1,6 @@
 import json
 import os
+import argparse
 import numpy as np
 from collections import namedtuple
 from typing import Tuple, Dict, List, Any, Union
@@ -17,14 +18,26 @@ from vllm.config import CompilationConfig
 import sys
 
 
-# eval_retrieval.py generates a json file with extracted chunks; the path to this file should be inserted here.
-file_path = "/mnt/CheckPoints/E5_Hotpotqa/128K_ms1.jsonl"
-output_file_path = "/mnt/CheckPoints/E5_Hotpotqa/eval_llm.json"
+parser = argparse.ArgumentParser(description="LLM answering with vLLM")
+parser.add_argument("--file_path", type=str, required=True,
+                    help="Path to the input JSONL file with extracted chunks")
+parser.add_argument("--model_name", type=str, required=True,
+                    help="Path to the model (e.g. /mnt/Qwen3-8B)")
+parser.add_argument("--output_file_path", type=str, default=None,
+                    help="Path to save the output JSON (default: <input_dir>/<input_stem>_eval_llm.json)")
+args = parser.parse_args()
 
-model_name = "/mnt/Qwen3-8B"
-#model_name = "/mnt/Qwen3-14B"
-#model_name = "/mnt/Qwen3-32B"
-#model_name = "/mnt/QwQ-32B"
+file_path = args.file_path
+model_name = args.model_name
+if args.output_file_path:
+    output_file_path = args.output_file_path
+else:
+    base, _ = os.path.splitext(file_path)
+    output_file_path = base + "_eval_llm.json"
+
+print(f"Input: {file_path}")
+print(f"Output: {output_file_path}")
+print(f"Model: {model_name}")
 
 
 
@@ -266,4 +279,5 @@ print("=" * 50)
 with open(output_file_path, 'w', encoding='utf-8') as f_out:
     json.dump(results, f_out, indent=4, ensure_ascii=False)
 print(f"Все результаты сохранены в {output_file_path}")
+
 
