@@ -161,7 +161,8 @@ envs.max_steps=6
 python eval_retriever.py \
   pretrained_path=./qrag-ft-e5-on-hotpotqa \
   num_samples=-1 \
-  +envs.max_steps=2
+  +envs.max_steps=2 \
+  +envs.data_path=./datasets/data_sources/hotpotqa
 ```
 
 
