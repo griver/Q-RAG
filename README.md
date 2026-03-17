@@ -157,12 +157,24 @@ envs.max_steps=6
 
 `eval_retriever.py` evaluates a pretrained retriever checkpoint and writes logs to the model's folder as `eval_seed{seed}_ns{num_sentences}.jsonl`.
 
+**HotpotQA only
+
 ```bash
 python eval_retriever.py \
   pretrained_path=./qrag-ft-e5-on-hotpotqa \
   num_samples=-1 \
   +envs.max_steps=2 \
   +envs.data_path=./datasets/data_sources/hotpotqa
+```
+
+**MuSiQue only
+
+```bash
+python eval_retriever.py \
+  pretrained_path=./qrag-ft-e5-on-musique \
+  num_samples=-1 \
+  +envs.max_steps=4 \
+  +envs.data_path=./datasets/data_sources/musique
 ```
 
 
