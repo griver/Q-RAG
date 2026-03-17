@@ -119,7 +119,7 @@ Download HotpotQA and Musique datasets from [Google Drive](https://drive.google.
 
 #### Training
 
-**HotpotQA only:**
+**E5 HotpotQA only:**
 
 ```bash
 python train_q_rag.py \
@@ -134,7 +134,7 @@ python train_q_rag.py \
    max_action_length=220
 ```
 
-**MuSiQue only:**
+**E5 MuSiQue only:**
 
 ```bash
 python train_q_rag.py \
@@ -176,7 +176,7 @@ envs.max_steps=6
 
 `eval_retriever.py` evaluates a pretrained retriever checkpoint and writes logs to the model's folder as `eval_seed{seed}.jsonl`.
 
-**HotpotQA only**
+**E5 HotpotQA only**
 
 ```bash
 python eval_retriever.py \
@@ -186,7 +186,7 @@ python eval_retriever.py \
   +envs.data_path=./datasets/data_sources/hotpotqa
 ```
 
-**MuSiQue only**
+**E5 MuSiQue only**
 
 ```bash
 python eval_retriever.py \
@@ -202,7 +202,7 @@ python eval_retriever.py \
 ```bash
 python llm-answering-vllm.py \
      --file_path ./qrag-ft-e5-on-hotpotqa/eval_seed42.jsonl \
-     --model_name Qwen/Qwen3-8B \
+     --model_name Qwen/QwQ-32B \
      --output_file_path ./qrag-ft-e5-on-hotpotqa/llm-answering_eval.json
 ```
 
