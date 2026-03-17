@@ -200,7 +200,7 @@ python eval_retriever.py \
 **LLM evaluation:**
 
 ```bash
-python llm-answering-vllm.py \
+python eval_llm_openqa.py \
      --file_path ./qrag-ft-e5-on-hotpotqa/eval_seed42.jsonl \
      --model_name Qwen/QwQ-32B \
      --output_file_path ./qrag-ft-e5-on-hotpotqa/llm-answering_eval.json
@@ -342,11 +342,11 @@ Download RULER (NIAH) data from [Google Drive](https://drive.google.com/drive/fo
 Q-RAG/
 ├── train_q_rag.py              # Main training script
 ├── eval_retriever.py           # Retriever evaluation
-├── eval_llm_synthetics.py      # LLM evaluation (BabiLong)
+├── eval_llm_synthetics.py      # LLM evaluation on BabiLong/Ruler
 ├── eval_llm_longbench.py       # LLM evaluation on LongBench
 ├── eval_sbor_q.py              # Q-value evaluation
 ├── eval_feedback.py            # Feedback model evaluation
-├── llm-answering-vllm.py       # LLM answering via vLLM
+├── ‎eval_llm_openqa.py          # LLM evaluation via vLLM on HotpotQA/MuSiQue
 │
 ├── configs/                    # Hydra configs
 │   ├── training.yaml           # Main training config
