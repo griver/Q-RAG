@@ -123,12 +123,15 @@ Download HotpotQA and Musique datasets from [Google Drive](https://drive.google.
 
 ```bash
 python train_q_rag.py \
-  envs=hotpotqa \
-  max_action_length=220 \
-  envs.max_steps=2 \
-  batch_size=16 \
-  accumulate_grads=2 \
-  eval_episodes=100
+   envs=hotpotqa \
+   algo=pqn_e5_hotpotqa \
+   envs.data_path="./datasets/data_sources/hotpotqa" \
+   steps_count=10000 \
+   batch_size=12 \
+   accumulate_grads=8 \
+   eval_interval=100 \
+   envs_parallel=1 \
+   max_action_length=220
 ```
 
 **HotpotQA + Musique (combined, GTE embedder):**
