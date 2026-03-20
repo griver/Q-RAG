@@ -312,15 +312,15 @@ CUDA_VISIBLE_DEVICES=0 python eval_llm_synthetics.py \
 
 #### Data Preparation
 
-Download RULER (NIAH) data from [Google Drive](https://drive.google.com/drive/folders/1UUIx-6vEBF9Mij81iVgPul86aXhdyxhG). Default paths are set in `configs/envs/niah.yaml`.
+Download RULER data from [Google Drive](https://drive.google.com/drive/folders/1UUIx-6vEBF9Mij81iVgPul86aXhdyxhG). Default paths are set in `configs/envs/niah.yaml` or `configs/envs/hotpotqa+musique.yaml`.
 
-#### Training
+#### Training RULER-NIAH
 
 ```bash
 
 ```
 
-#### Evaluation
+#### Evaluation RULER-NIAH
 
 **Retriever evaluation:**
 
@@ -334,6 +334,36 @@ Download RULER (NIAH) data from [Google Drive](https://drive.google.com/drive/fo
 
 ```
 
+#### Evaluation RULER-QA
+
+**Retriever evaluation:**
+
+For single-hop QA
+```bash
+python eval_retriever.py \
+  pretrained_path=./qrag-ft-gte-on-hotpotqa_musique \
+  num_samples=-1 \
+  +envs.max_steps=1 \
+  +envs.data_path=./datasets/data_sources/RULER/QA-SQuAD
+```
+For multi-hop QA
+```bash
+python eval_retriever.py \
+  pretrained_path=./qrag-ft-gte-on-hotpotqa_musique \
+  num_samples=-1 \
+  +envs.max_steps=3 \
+  +envs.data_path=./datasets/data_sources/RULER/QA-HotpotQA
+```
+
+**LLM evaluation:**
+
+For both single-hop QA and multi-hop QA
+```bash
+python eval_llm_openqa.py \
+     --file_path ./qrag-ft-gte-on-hotpotqa_musique/eval_seed42.jsonl \
+     --model_name Qwen/QwQ-32B \
+     --output_file_path ./qrag-ft-gte-on-hotpotqa_musique/llm-answering_eval.json
+```
 ---
 
 ## 📂 Repository Structure
