@@ -155,32 +155,32 @@ def compute_f1(prediction, target):
 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print(f"Используемое устройство: {device}")
+print(f"Using device: {device}")
 
-# ---  Загрузка модели через vLLM ---
+# ---  Loading the model via vLLM ---
 
-# Токенизатор все еще нужен для корректного применения шаблона чата
+# The tokenizer is still needed to correctly apply the chat template
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 
 
-# Загружаем модель с помощью LLM класса из vllm
-# Если у вас несколько GPU, можно добавить: tensor_parallel_size=N
+# Load the model using the LLM class from vLLM
+# If you have multiple GPUs, you can add: tensor_parallel_size=N
 llm = LLM(model=model_name,
           trust_remote_code=True,
           gpu_memory_utilization=0.95,
           max_model_len=32000,)
-print(f"Модель {model_name} успешно загружена с помощью vLLM.")
+print(f"Model {model_name} loaded successfully with vLLM.")
 
 
 
 
-# Списки для хранения результатов
+# Lists for storing results
 results = []
 all_em_scores = []
 all_f1_scores = []
 
 all_prompts = []
-for data in tqdm(dataset, desc="Подготовка промптов"):
+for data in tqdm(dataset, desc="Preparing prompts"):
     question = data['question']
     context = "\n\n---\n\n".join(data['pred_texts'])
     full_prompt_for_model = qa_prompt.format(context=context, question=question)
@@ -197,32 +197,32 @@ for data in tqdm(dataset, desc="Подготовка промптов"):
     )
     all_prompts.append(text)
 
-print(f"Подготовлено {len(all_prompts)} промптов для батчевой обработки.")
+print(f"Prepared {len(all_prompts)} prompts for batch processing.")
 
 
-# 2. Запускаем генерацию для всех промптов ОДНИМ вызовом
-# Задаем параметры генерации
+# 2. Run generation for all prompts in a SINGLE call
+# Set generation parameters
 sampling_params = SamplingParams(
     max_tokens=4000,
-    temperature=0.0, # temperature=0.0 для жадной генерации
+    temperature=0.0, # temperature=0.0 for greedy generation
 )
 
-print("Запуск батчевой генерации ответов...")
+print("Starting batch answer generation...")
 outputs = llm.generate(all_prompts, sampling_params)
-print("Генерация завершена.")
+print("Generation completed.")
 
 
-# 3. Теперь обрабатываем результаты
+# 3. Results processing
 results = []
 all_em_scores = []
 all_f1_scores = []
 
-# Используем zip для сопоставления исходных данных и сгенерированных ответов
-for i, (data, output) in enumerate(tqdm(zip(dataset, outputs), total=len(dataset), desc="Обработка результатов")):
+
+for i, (data, output) in enumerate(tqdm(zip(dataset, outputs), total=len(dataset), desc="Processing results")):
     question = data['question']
     ground_truth_answer = data['answer']
 
-    # Текст ответа находится в output.outputs[0].text
+    # the answer text in output.outputs[0].text
     decoded_output = output.outputs[0].text
 
     if "Final answer:" in decoded_output:
@@ -251,33 +251,33 @@ for i, (data, output) in enumerate(tqdm(zip(dataset, outputs), total=len(dataset
     if (i + 1) % 100 == 0:
         with open(output_file_path, 'w', encoding='utf-8') as f_out:
             json.dump(results, f_out, indent=4, ensure_ascii=False)
-        print(f"--- {i+1}/{len(dataset)}: Промежуточные результаты сохранены. ---")
+        print(f"--- {i+1}/{len(dataset)}: Intermediate results saved. ---")
 
     # if (i + 1) % 10 == 0:
     #     avg_em = sum(all_em_scores) / len(all_em_scores)
     #     avg_f1 = sum(all_f1_scores) / len(all_f1_scores)
     #     print("=" * 50)
-    #     print(f"Обработано сэмплов: {len(all_em_scores)}")
-    #     print(f"Средний Exact Match (EM): {avg_em:.4f}")
-    #     print(f"Средний F1-Score: {avg_f1:.4f}")
+    #     print(f"Samples processed: {len(all_em_scores)}")
+    #     print(f"Average Exact Match (EM): {avg_em:.4f}")
+    #     print(f"Average F1-Score: {avg_f1:.4f}")
     #     print("=" * 50)
 
 
-# --- Финальный подсчет метрик ---
+# --- Final metric calculation ---
 avg_em = sum(all_em_scores) / len(all_em_scores) if all_em_scores else 0
 avg_f1 = sum(all_f1_scores) / len(all_f1_scores) if all_f1_scores else 0
 
 print("\n" + "=" * 50)
-print("             ИТОГОВАЯ ОЦЕНКА")
+print("             EVAL RESULTS")
 print("=" * 50)
-print(f"Обработано сэмплов: {len(results)}")
-print(f"Средний Exact Match (EM): {avg_em:.4f}")
-print(f"Средний F1-Score: {avg_f1:.4f}")
+print(f"Num samples: {len(results)}")
+print(f"Mean Exact Match (EM): {avg_em:.4f}")
+print(f"Mean F1-Score: {avg_f1:.4f}")
 print("=" * 50)
 
-# Финальное сохранение
+# Final Save
 with open(output_file_path, 'w', encoding='utf-8') as f_out:
     json.dump(results, f_out, indent=4, ensure_ascii=False)
-print(f"Все результаты сохранены в {output_file_path}")
+print(f"All results saved to {output_file_path}")
 
 
