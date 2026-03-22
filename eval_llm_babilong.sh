@@ -15,14 +15,26 @@ LLM=$2              # name of llm in hf
 TASK=$3             # babi task
 GPU_ID=$4           # gpu for inference
 
-SEED=42             # фиксируем сид
+SEED=42             
 NS_LIST=(50 160 1200 4600 40000 400000)   # cycle over number of sentences in context
+QVALUE_LIST=(0.5)   # qvalue threshold for chunk filtering
 
-for NS in "${NS_LIST[@]}"; do
-  echo "▶️  Run Num sentences=${NS}, Task=${TASK}"
-  CUDA_VISIBLE_DEVICES="${GPU_ID}" ~/.mlspace/envs/msr/bin/python3 eval_llm.py \
-    "${LOGDIR_PATH}/eval_seed${SEED}_ns${NS}.jsonl" \
-    --llm_name "${LLM}" \
-    --babi_task "${TASK}" \
-    --max_token 256 --think
+for QVALUE in "${QVALUE_LIST[@]}"; do
+  # Create log file with qvalue prefix
+  LOG_FILE="${LOGDIR_PATH}/eval_llm_qvalue_${QVALUE}_task_${TASK}.log"
+  echo "Starting evaluation with qvalue=${QVALUE}, task=${TASK}, log: ${LOG_FILE}"
+  
+  for NS in "${NS_LIST[@]}"; do
+    echo "Run Num sentences=${NS}, Task=${TASK}, qvalue=${QVALUE}"
+    nohup env CUDA_VISIBLE_DEVICES="${GPU_ID}" python3 eval_llm_synthetics.py \
+      "${LOGDIR_PATH}/eval_seed${SEED}_ns${NS}_max-steps6.jsonl" \
+      --llm_name "${LLM}" \
+      --babi_task "${TASK}" \
+      --chunk_filter qvalue \
+      --stopping_threshold "${QVALUE}" \
+      >> "${LOG_FILE}" 2>&1
+    echo "Completed NS=${NS} with qvalue=${QVALUE}" | tee -a "${LOG_FILE}"
+  done
+  
+  echo "Completed all NS values for qvalue=${QVALUE}"
 done

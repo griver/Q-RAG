@@ -12,10 +12,10 @@ fi
 PRETRAINED_PATH="$1"
 GPU_ID="$2"
 SEED="$3"
-                   #1k, 4k, 32k, 128k, 1kk    10kk
-NUM_SENTENCES_LIST=(50 160 1200 4600 40000) # 400000)
+                   #1k, 4k, 32k, 128k, 1kk,  10kk
+NUM_SENTENCES_LIST=(50 160 1200 4600 40000 400000)
 
-PYTHON="python3" #"$HOME/.mlspace/envs/msr/bin/python3"
+PYTHON="python3"
 SCRIPT="eval_retriever.py"
 
 for N in "${NUM_SENTENCES_LIST[@]}"; do
@@ -23,6 +23,7 @@ for N in "${NUM_SENTENCES_LIST[@]}"; do
   CUDA_VISIBLE_DEVICES="$GPU_ID" "$PYTHON" "$SCRIPT" \
     pretrained_path="$PRETRAINED_PATH" \
     envs.num_sentences="$N" \
+    +envs.test_env.feedback_model.never_terminate=True \
     num_samples=-1 \
     seed="$SEED"
 done

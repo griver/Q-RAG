@@ -229,17 +229,6 @@ The total number of chunks is controlled by the `num_chunks` / `num_sentences` p
 #### Training
 
 ```bash
-# Example: QA2 task, 100 sentences, single GPU with 16 GB
-python train_q_rag.py \
-  envs.task=qa2_two-supporting-facts \
-  envs.num_sentences=100 \
-  batch_size=16 \
-  accumulate_grads=3
-```
-
-**Training with optimal Q-value early stopping (q_value = 0.5):**
-
-```bash
 CUDA_VISIBLE_DEVICES=0 python train_q_rag.py \
   eval_interval=500 \
   eval_episodes=1000 \
@@ -256,55 +245,19 @@ CUDA_VISIBLE_DEVICES=0 python train_q_rag.py \
 
 #### Evaluation
 
-**Retriever evaluation (single context length):**
-
-```bash
-python eval_retriever.py \
-  pretrained_path=runs/<run_name> \
-  envs.num_sentences=1200 \
-  num_samples=200
-```
-
-**Multi-length BabiLong sweep** (1K → 1M tokens):
+**Retriever evaluation with multi-length BabiLong sweep** (1K → 1M tokens):
 
 ```bash
 ./scripts/eval_retriever_babilong.sh runs/<run_name> 0 42
 ```
 
-**Retriever evaluation with Q-value collection:**
-
-```bash
-CUDA_VISIBLE_DEVICES=0 python eval_retriever.py \
-    pretrained_path="PRETRAINED_PATH" \
-    envs.num_sentences=1200 \
-    num_samples=-1 \
-    seed=42
-```
-
 > Sentence-to-token mapping: `50→1k, 160→4k, 1200→32k, 4600→128k, 40000→1M`
 
-**LLM evaluation:**
+**LLM evaluation with multi-length BabiLong sweep:**
 
 ```bash
-# Single log file
-CUDA_VISIBLE_DEVICES=0 python eval_llm_synthetics.py \
-  retriever_logdir/retriever_logs.jsonl \
-  --llm_name "Qwen/Qwen3-4B" \
-  --babi_task qa4
-
 # Multi-length sweep
 ./scripts/eval_llm_babilong.sh path/to/retriever_logdir "Qwen/Qwen3-4B" "qa4" 0
-```
-
-**LLM evaluation with optimal Q-value filtering (0.5):**
-
-```bash
-CUDA_VISIBLE_DEVICES=0 python eval_llm_synthetics.py \
-  retriever_logdir/retriever_logs.jsonl \
-  --llm_name "Qwen/Qwen3-4B" \
-  --babi_task qa5 \
-  --chunk_filter qvalue \
-  --stopping_threshold 0.5
 ```
 
 ---
