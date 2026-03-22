@@ -32,6 +32,7 @@ Q-RAG achieves **state-of-the-art results** on long-context benchmarks (**BabiLo
 | 📝 arXiv preprint | [arxiv.org/abs/2511.07328](https://arxiv.org/abs/2511.07328) |
 | 📑 PDF | [arxiv.org/pdf/2511.07328](https://arxiv.org/pdf/2511.07328) |
 | 💾 Data | [Google Drive](https://drive.google.com/drive/folders/1UUIx-6vEBF9Mij81iVgPul86aXhdyxhG) |
+| 💾 Hugging Face | [Hugging Face] (https://huggingface.co/Q-RAG) |
 
 ---
 
