@@ -127,7 +127,7 @@ Download HotpotQA and Musique datasets from [Google Drive](https://drive.google.
 python train_q_rag.py \
    envs=hotpotqa \
    algo=pqn_e5_hotpotqa \
-   envs.data_path="your_path_to_datasets/hotpotqa" \
+   envs.data_path="your/path/to/datasets/hotpotqa" \
    steps_count=10000 \
    batch_size=12 \
    accumulate_grads=8 \
@@ -142,7 +142,7 @@ python train_q_rag.py \
 python train_q_rag.py \
   envs=musique \
   algo=pqn_e5_musique \
-  envs.data_path="your_path_to_datasets/musique" \
+  envs.data_path="your/path/to/datasets/musique" \
   steps_count=10000 \
   batch_size=12 \
   accumulate_grads=8 \
@@ -185,7 +185,7 @@ python eval_retriever.py \
   pretrained_path=./qrag-ft-e5-on-hotpotqa \
   num_samples=-1 \
   +envs.max_steps=2 \
-  +envs.data_path=your_path_to_datasets/hotpotqa
+  +envs.data_path=your/path/to/datasets/hotpotqa
 ```
 
 **E5 MuSiQue only**
@@ -195,7 +195,7 @@ python eval_retriever.py \
   pretrained_path=./qrag-ft-e5-on-musique \
   num_samples=-1 \
   +envs.max_steps=4 \
-  +envs.data_path=your_path_to_datasets/musique
+  +envs.data_path=your/path/to/datasets/musique
 ```
 
 
