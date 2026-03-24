@@ -6,6 +6,7 @@
 
 [![Paper](https://img.shields.io/badge/Paper-ICLR_2026-blue?style=for-the-badge)](https://openreview.net/forum?id=MS9nWFY7LG)
 [![arXiv](https://img.shields.io/badge/arXiv-2511.07328-b31b1b?style=for-the-badge)](https://arxiv.org/abs/2511.07328)
+[![Hugging Face](https://img.shields.io/badge/Hugging_Face-Q--RAG-yellow?style=for-the-badge&logo=huggingface&logoColor=white)](https://huggingface.co/Q-RAG)
 [![Python](https://img.shields.io/badge/Python-3.12-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
 [![License](https://img.shields.io/badge/License-CC_BY_4.0-lightgrey?style=for-the-badge)](https://creativecommons.org/licenses/by/4.0/)
 
@@ -31,8 +32,8 @@ Q-RAG achieves **state-of-the-art results** on long-context benchmarks (**BabiLo
 | 📄 Paper (ICLR 2026) | [OpenReview](https://openreview.net/forum?id=MS9nWFY7LG) |
 | 📝 arXiv preprint | [arxiv.org/abs/2511.07328](https://arxiv.org/abs/2511.07328) |
 | 📑 PDF | [arxiv.org/pdf/2511.07328](https://arxiv.org/pdf/2511.07328) |
+| 🤗 Hugging Face | [Hugging Face](https://huggingface.co/Q-RAG) |
 | 💾 Data | [Google Drive](https://drive.google.com/drive/folders/1UUIx-6vEBF9Mij81iVgPul86aXhdyxhG) |
-| 💾 Hugging Face | [Hugging Face](https://huggingface.co/Q-RAG) |
 
 ---
 
