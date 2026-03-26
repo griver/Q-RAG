@@ -182,7 +182,10 @@ all_f1_scores = []
 all_prompts = []
 for data in tqdm(dataset, desc="Preparing prompts"):
     question = data['question']
-    context = "\n\n---\n\n".join(data['pred_texts'])
+    try:
+        context = "\n\n---\n\n".join(data['pred_texts'])
+    except (KeyError, TypeError):
+        context = "\n\n---\n\n".join(data['pred_text'])
     full_prompt_for_model = qa_prompt.format(context=context, question=question)
 
     messages = [
