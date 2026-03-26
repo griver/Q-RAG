@@ -22,19 +22,6 @@
 
 Q-RAG achieves **state-of-the-art results** on long-context benchmarks (**BabiLong**, **RULER**) for contexts up to **10M tokens** and competitive performance on open-domain multi-hop QA (**HotpotQA**, **Musique**) — all trained on a **single A100 GPU**.
  
-
----
-
-## 🔗 Links
-
-| Resource | Link |
-|----------|------|
-| 📄 Paper (ICLR 2026) | [OpenReview](https://openreview.net/forum?id=MS9nWFY7LG) |
-| 📝 arXiv preprint | [arxiv.org/abs/2511.07328](https://arxiv.org/abs/2511.07328) |
-| 📑 PDF | [arxiv.org/pdf/2511.07328](https://arxiv.org/pdf/2511.07328) |
-| 🤗 Hugging Face | [Hugging Face](https://huggingface.co/Q-RAG) |
-| 💾 Data | [Google Drive](https://drive.google.com/drive/folders/1UUIx-6vEBF9Mij81iVgPul86aXhdyxhG) |
-
 ---
 
 ### Datasets
@@ -107,12 +94,6 @@ python -c "from rl.agents.pqn import PQNActor; print('✅ Q-RAG installed succes
 
 > **General notes:**
 > - Training is launched via `train_q_rag.py`. All hyperparameters are managed by [Hydra](https://hydra.cc/) configs in `configs/`.
-> - Download datasets from [Google Drive](https://drive.google.com/drive/folders/1UUIx-6vEBF9Mij81iVgPul86aXhdyxhG). Default paths are set in `configs/envs/`. Dataset paths use relative paths (e.g., `../datasets/...`), so the `datasets/` folder must be placed **next to** the `Q-RAG` repository directory:
->   ```
->   parent_dir/
->   ├── Q-RAG/      ← this repository
->   └── datasets/   ← downloaded datasets go here
->   ```
 > - Results may vary slightly across seeds. All training was performed on a single A100-80GB GPU within 12 hours per model.
 > - **Config priority:** `CLI args` > `configs/testing.yaml` > `pretrained_path/config.yaml`
 
@@ -127,7 +108,7 @@ python -c "from rl.agents.pqn import PQNActor; print('✅ Q-RAG installed succes
 
 #### Data Preparation
 
-Download HotpotQA and Musique datasets from [Google Drive](https://drive.google.com/drive/folders/1UUIx-6vEBF9Mij81iVgPul86aXhdyxhG) and place them so that the environment configs can find them. Default paths are set in `configs/envs/hotpotqa.yaml`, `configs/envs/musique.yaml`, and `configs/envs/hotpotqa+musique.yaml`.
+Download HotpotQA and Musique datasets and place them so that the environment configs can find them. Default paths are set in `configs/envs/hotpotqa.yaml`, `configs/envs/musique.yaml`, and `configs/envs/hotpotqa+musique.yaml`.
 
 #### Training
 
@@ -224,7 +205,7 @@ python eval_llm_openqa.py \
 
 #### Data Preparation
 
-Download BabiLong data from [Google Drive](https://drive.google.com/drive/folders/1UUIx-6vEBF9Mij81iVgPul86aXhdyxhG). Default paths are set in `configs/envs/babilong.yaml`.
+Download BabiLong data and set default paths are set in `configs/envs/babilong.yaml`.
 
 **Chunking pipeline:** In BabiLong, **each chunk is a single sentence** (not a fixed-size text block). The pipeline works as follows:
 
@@ -277,7 +258,7 @@ CUDA_VISIBLE_DEVICES=0 python train_q_rag.py \
 
 #### Data Preparation
 
-Download RULER data from [Google Drive](https://drive.google.com/drive/folders/1UUIx-6vEBF9Mij81iVgPul86aXhdyxhG). Default paths are set in `configs/envs/niah.yaml` or `configs/envs/hotpotqa+musique.yaml`.
+Download RULER data and set default paths are set in `configs/envs/niah.yaml` or `configs/envs/hotpotqa+musique.yaml`.
 
 #### Training RULER-NIAH
 
