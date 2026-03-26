@@ -37,6 +37,16 @@ Q-RAG achieves **state-of-the-art results** on long-context benchmarks (**BabiLo
 
 ---
 
+### Datasets
+
+You can download the necessary dataset from [🤗 Hugging Face](https://huggingface.co/Q-RAG) or [Google Drive](https://drive.google.com/drive/folders/1UUIx-6vEBF9Mij81iVgPul86aXhdyxhG). Default paths are set in `configs/envs/`. Dataset paths use relative paths (e.g., `../datasets/...`), so the `datasets/` folder must be placed **next to** the `Q-RAG` repository directory:
+>   ```
+>   parent_dir/
+>   ├── Q-RAG/      ← this repository
+>   └── datasets/   ← downloaded datasets go here
+>   ```
+
+
 ### Results
 #### RULER benchmark (Table 1)
 Q-RAG achieves near-perfect retrieval on all NIAH subtasks, trained on 4K-length documents and generalizing up to 1M tokens:
