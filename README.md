@@ -237,6 +237,16 @@ CUDA_VISIBLE_DEVICES=0 python train_q_rag.py \
 
 #### Evaluation
 
+**Retriever evaluation with single-length BabiLong:**
+
+```bash
+CUDA_VISIBLE_DEVICES=0 python eval_retriever.py \
+    pretrained_path="your/path/to/model" \
+    envs.num_sentences=1200 \
+    num_samples=-1 \
+    seed=42
+```
+
 **Retriever evaluation with multi-length BabiLong sweep** (1K → 1M tokens):
 
 ```bash
@@ -245,11 +255,22 @@ CUDA_VISIBLE_DEVICES=0 python train_q_rag.py \
 
 > Sentence-to-token mapping: `50→1k, 160→4k, 1200→32k, 4600→128k, 40000→1M`
 
+**LLM evaluation with single-length BabiLong:**
+
+```bash
+CUDA_VISIBLE_DEVICES=0 python eval_llm_synthetics.py \
+  retriever_logdir/retriever_logs.jsonl \
+  --llm_name "Qwen/Qwen3-4B" \
+  --babi_task qa3 \
+  --chunk_filter qvalue \
+  --stopping_threshold 0.5
+```
+
 **LLM evaluation with multi-length BabiLong sweep:**
 
 ```bash
 # Multi-length sweep
-./scripts/eval_llm_babilong.sh path/to/retriever_logdir "Qwen/Qwen3-4B" "qa4" 0
+./scripts/eval_llm_babilong.sh path/to/retriever_logdir "Qwen/Qwen3-4B" "qa3" 0
 ```
 
 ---
