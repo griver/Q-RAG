@@ -230,7 +230,7 @@ CUDA_VISIBLE_DEVICES=0 python train_q_rag.py \
   feedback.ground_truth.penalize_extra_steps=True \
   feedback.never_terminate=True \
   envs_parallel=1 \
-  logger.log_dir=runs/q_value_early_stop \
+  logger.log_dir=runs/ \
   envs.task="qa3_three-supporting-facts"
 ```
 
