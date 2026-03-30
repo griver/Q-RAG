@@ -77,9 +77,9 @@ conda create -n qrag python=3.12 -y
 conda activate qrag
 
 # Install dependencies
-python -m pip install -U pip wheel
-pip install vllm  # pulls compatible PyTorch, Transformers, Triton, etc.
-pip install hydra-core tensorboard rotary-embedding-torch pandas nltk sortedcontainers accelerate datasets
+python -m pip install pip==26.0.1 wheel==0.46.3
+pip install vllm==0.18.0  # pulls compatible PyTorch, Transformers, Triton, etc.
+pip install hydra-core==1.3.2 tensorboard==2.20.0 rotary-embedding-torch==0.8.9 pandas==3.0.1 nltk==3.9.4 sortedcontainers==2.4.0 accelerate==1.13.0 datasets==4.8.4
 ```
 
 ### Smoke test
