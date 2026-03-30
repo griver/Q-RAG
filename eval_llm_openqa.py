@@ -25,6 +25,9 @@ parser.add_argument("--model_name", type=str, required=True,
                     help="Path to the model (e.g. /mnt/Qwen3-8B)")
 parser.add_argument("--output_file_path", type=str, default=None,
                     help="Path to save the output JSON (default: <input_dir>/<input_stem>_eval_llm.json)")
+parser.add_argument("--max_tokens", type=int, default=4000, help="Max tokens to generate")
+parser.add_argument('--gpu_util', type=float, default=0.95, help="Max gpu memory utilization. Default: 0.3")
+parser.add_argument('--think', action="store_true", default=True, help='enable_thinking for Qwen3 models.')
 args = parser.parse_args()
 
 file_path = args.file_path
@@ -167,7 +170,7 @@ tokenizer = AutoTokenizer.from_pretrained(model_name)
 # If you have multiple GPUs, you can add: tensor_parallel_size=N
 llm = LLM(model=model_name,
           trust_remote_code=True,
-          gpu_memory_utilization=0.95,
+          gpu_memory_utilization=args.gpu_util,
           max_model_len=32000,)
 print(f"Model {model_name} loaded successfully with vLLM.")
 
@@ -193,10 +196,16 @@ for data in tqdm(dataset, desc="Preparing prompts"):
         {"role": "user", "content": full_prompt_for_model}
     ]
 
+    chat_template_kwargs = dict(
+        tokenize=False,
+        add_generation_prompt=True,
+    )
+    if "Qwen3" in model_name:
+        chat_template_kwargs['enable_thinking'] = args.think
+
     text = tokenizer.apply_chat_template(
         messages,
-        tokenize=False,
-        add_generation_prompt=True
+        **chat_template_kwargs
     )
     all_prompts.append(text)
 
@@ -206,7 +215,7 @@ print(f"Prepared {len(all_prompts)} prompts for batch processing.")
 # 2. Run generation for all prompts in a SINGLE call
 # Set generation parameters
 sampling_params = SamplingParams(
-    max_tokens=4000,
+    max_tokens=args.max_tokens,
     temperature=0.0, # temperature=0.0 for greedy generation
 )
 
@@ -282,5 +291,3 @@ print("=" * 50)
 with open(output_file_path, 'w', encoding='utf-8') as f_out:
     json.dump(results, f_out, indent=4, ensure_ascii=False)
 print(f"All results saved to {output_file_path}")
-
-

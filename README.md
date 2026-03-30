@@ -53,8 +53,7 @@ Results on HotpotQA (in-domain) and Musique (out-of-distribution). QwQ-32B was u
 Q-RAG achieves the highest average performance across 5 tasks (QA1–QA5) at context lengths from 1M to 10M tokens, outperforming Titans, Atlas, ARMT, RMT, and proprietary LLMs. On the hardest subtask **QA3** (3-hop temporal reasoning), Q-RAG shows virtually **no degradation** as context grows to 10M tokens, while all baselines degrade significantly.
 
 <p align="center">
-  <img src="images/babilong_avg_ans_v2.png" width="48%"/>
-  <img src="images/babilong_qa3_ans.png" width="48%"/>
+  <img src="images/Babilong_graphics.png" width="96%"/>
 </p>
 
 > **Reproducibility note:** Results may vary slightly across seeds. All training was performed on a single A100-80GB GPU within 12 hours per model.
@@ -173,7 +172,7 @@ envs.max_steps=6
 
 ```bash
 python eval_retriever.py \
-  pretrained_path=./qrag-ft-e5-on-hotpotqa \
+  pretrained_path=your/path/to/qrag-ft-e5-on-hotpotqa \
   num_samples=-1 \
   +envs.max_steps=2 \
   +envs.data_path=your/path/to/datasets/hotpotqa
@@ -183,7 +182,7 @@ python eval_retriever.py \
 
 ```bash
 python eval_retriever.py \
-  pretrained_path=./qrag-ft-e5-on-musique \
+  pretrained_path=your/path/to/qrag-ft-e5-on-musique \
   num_samples=-1 \
   +envs.max_steps=4 \
   +envs.data_path=your/path/to/datasets/musique
@@ -194,9 +193,9 @@ python eval_retriever.py \
 
 ```bash
 python eval_llm_openqa.py \
-     --file_path ./qrag-ft-e5-on-hotpotqa/eval_seed42.jsonl \
+     --file_path your/path/to/qrag-ft-e5-on-hotpotqa/eval_seed42.jsonl \
      --model_name Qwen/QwQ-32B \
-     --output_file_path ./qrag-ft-e5-on-hotpotqa/llm-answering_eval.json
+     --output_file_path your/path/to/qrag-ft-e5-on-hotpotqa/llm-answering_eval.json
 ```
 
 ---
@@ -308,18 +307,18 @@ Download RULER data and set default paths are set in `configs/envs/niah.yaml` or
 For single-hop QA
 ```bash
 python eval_retriever.py \
-  pretrained_path=./qrag-ft-gte-on-hotpotqa_musique \
+  pretrained_path=your/path/to/qrag-ft-gte-on-hotpotqa_musique \
   num_samples=-1 \
   +envs.max_steps=1 \
-  +envs.data_path=./datasets/data_sources/RULER/QA-SQuAD
+  +envs.data_path=your/path/to/datasets/data_sources/RULER/QA-SQuAD
 ```
 For multi-hop QA
 ```bash
 python eval_retriever.py \
-  pretrained_path=./qrag-ft-gte-on-hotpotqa_musique \
+  pretrained_path=your/path/to/qrag-ft-gte-on-hotpotqa_musique \
   num_samples=-1 \
   +envs.max_steps=3 \
-  +envs.data_path=./datasets/data_sources/RULER/QA-HotpotQA
+  +envs.data_path=your/path/to/datasets/data_sources/RULER/QA-HotpotQA
 ```
 
 **LLM evaluation:**
@@ -327,9 +326,9 @@ python eval_retriever.py \
 For both single-hop QA and multi-hop QA
 ```bash
 python eval_llm_openqa.py \
-     --file_path ./qrag-ft-gte-on-hotpotqa_musique/eval_seed42.jsonl \
+     --file_path your/path/to/qrag-ft-gte-on-hotpotqa_musique/eval_seed42.jsonl \
      --model_name Qwen/QwQ-32B \
-     --output_file_path ./qrag-ft-gte-on-hotpotqa_musique/llm-answering_eval.json
+     --output_file_path your/path/to/qrag-ft-gte-on-hotpotqa_musique/llm-answering_eval.json
 ```
 ---
 
@@ -374,12 +373,9 @@ Q-RAG/
 │   └── answer_metric.py        # Answer quality metric
 │
 ├── scripts/                    # Shell scripts for batch evaluation
-│   ├── eval_retriever_babilong.sh
-│   ├── eval_llm_babilong.sh
-│   └── train_niah.sh
-│
-├── notebooks/                  # Jupyter notebooks (examples & analysis)
-└── legacy_scripts/             # Archived experimental scripts
+    ├── eval_retriever_babilong.sh
+    ├── eval_llm_babilong.sh
+    └── train_niah.sh
 ```
 
 ---
