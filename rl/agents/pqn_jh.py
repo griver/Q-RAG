@@ -9,7 +9,7 @@ from torch.optim import Adam, AdamW
 from collections import namedtuple
 from rl.bert_predictor import EmbedderWithAbsoluteEncoding
 from envs.utils import custom_pad_sequence, stack_memory, stack_text_list
-from ..q_module import TextQNet, TextQNetPolicy, TextRandomPolicy, ActionEmbedTarget, TextMaxQNet, TextVNet
+from ..q_module_jh import TextQNet, TextQNetPolicy, TextRandomPolicy, ActionEmbedTarget, TextMaxQNet, TextVNet, DecomInnerProd
 from envs.utils import TextMemory, TextMemoryItem
 import copy
 from omegaconf import DictConfig, OmegaConf
@@ -51,21 +51,24 @@ class PQN(object):
         action_embed_target: nn.Module = instantiate(config.pqn.action_embed_target)
         state_embed_copy = copy.deepcopy(state_embed)
         
-        self.critic = TextQNet(state_embed, action_embed).to(torch.get_default_device())
+        self.decom_inner_prod = DecomInnerProd(keep_orig=True)
+        self.dip_optim = instantiate(config.pqn.optimizer, params=self.decom_inner_prod.parameters())
+        self.dip_scheduler = instantiate(config.pqn.scheduler, optimizer=self.dip_optim)
+
+        self.critic = TextQNet(state_embed, action_embed, decom_inner_prod=self.decom_inner_prod).to(torch.get_default_device())
         self.critic_optim = instantiate(config.pqn.optimizer, params=self.critic.parameters())
         self.scheduler = instantiate(config.pqn.scheduler, optimizer=self.critic_optim)
        
-        self.policy = TextQNetPolicy(state_embed_copy, self.critic).to(torch.get_default_device())
+        self.policy = TextQNetPolicy(state_embed_copy, self.critic, decom_inner_prod=self.decom_inner_prod).to(torch.get_default_device())
         self.random_policy = TextRandomPolicy().to(torch.get_default_device())
 
-        self.v_net_target = TextVNet(state_embed_target, self.critic).to(torch.get_default_device())
+        self.v_net_target = TextVNet(state_embed_target, self.critic, decom_inner_prod=self.decom_inner_prod).to(torch.get_default_device())
         self.action_embed_target = ActionEmbedTarget(action_embed_target, self.critic).to(torch.get_default_device())
 
         self.state_tokenizer = state_embed.tokenizer
         self.action_tokenizer = action_embed.tokenizer
 
         self.train_step = self.make_train_step()
-
 
     def make_train_step(self):
 
@@ -187,10 +190,15 @@ class PQN(object):
             self.scheduler.step()
             self.critic_optim.zero_grad()
 
+            torch.nn.utils.clip_grad_norm_(self.decom_inner_prod.parameters(), self.max_grad_norm)
+            self.dip_optim.step()
+            self.dip_scheduler.step()
+            self.dip_optim.zero_grad()
+
             self.alpha = self.alpha_start * float(self.scheduler.get_lr()[0]) / self.start_lr
-            self.v_net_target.update(self.critic, self.tau)
+            self.v_net_target.update(self.critic, self.tau, self.decom_inner_prod)
             self.action_embed_target.update(self.critic, self.tau)
-            self.policy.update(self.critic)
+            self.policy.update(self.critic, self.decom_inner_prod)
 
         return qf_loss.item()
     

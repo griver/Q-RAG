@@ -24,10 +24,10 @@ def policy_apply(policy, v_net, state, a_embeds,  a_embeds_target, alpha, return
     return action, q_values, q_values_target
 
 
-class PQN(object):
+class PQN(nn.Module):
 
     def __init__(self, config: DictConfig):
-
+        super().__init__()
         self.config = copy.deepcopy(config)
         self.gamma = config.pqn.hyperparams.gamma
         self.alpha = config.pqn.hyperparams.alpha
