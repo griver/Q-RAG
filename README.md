@@ -242,6 +242,7 @@ CUDA_VISIBLE_DEVICES=0 python train_q_rag.py \
 CUDA_VISIBLE_DEVICES=0 python eval_retriever.py \
     pretrained_path="your/path/to/model" \
     envs.num_sentences=1200 \
+    +envs.test_env.feedback_model.never_terminate=True \
     num_samples=-1 \
     seed=42
 ```
