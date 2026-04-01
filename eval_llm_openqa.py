@@ -19,9 +19,9 @@ import sys
 
 
 parser = argparse.ArgumentParser(description="LLM answering with vLLM")
-parser.add_argument("--file_path", type=str, required=True,
+parser.add_argument("--retriever_logfile", type=str, required=True,
                     help="Path to the input JSONL file with extracted chunks")
-parser.add_argument("--model_name", type=str, required=True,
+parser.add_argument("--llm_name", type=str, required=True,
                     help="Path to the model (e.g. /mnt/Qwen3-8B)")
 parser.add_argument("--output_file_path", type=str, default=None,
                     help="Path to save the output JSON (default: <input_dir>/<input_stem>_eval_llm.json)")
