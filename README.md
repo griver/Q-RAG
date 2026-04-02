@@ -124,6 +124,7 @@ python train_q_rag.py \
    eval_interval=100 \
    envs_parallel=1 \
    max_action_length=220
+   max_action_length_in_memory=220
 ```
 
 **E5 MuSiQue only:**
@@ -139,6 +140,7 @@ python train_q_rag.py \
   eval_interval=100 \
   envs_parallel=1 \
   max_action_length=110
+  max_action_length_in_memory=110
 ```
 
 
