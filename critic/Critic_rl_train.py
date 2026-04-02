@@ -132,7 +132,7 @@ def parse_args():
     p.add_argument("--critic_base",       type=str, default="Qwen/Qwen2.5-7B-Instruct",
                    help="Base model for critic (trained from scratch with LoRA)")
     p.add_argument("--planner_base",      type=str, default="Qwen/Qwen2.5-7B-Instruct")
-    p.add_argument("--planner_lora",      type=str, default="./planner/qwen_planner_lora_v2")
+    p.add_argument("--planner_lora",      type=str, default="workspace/planner/qwen_planner_lora_v2")
     p.add_argument("--qa_model",          type=str, default="Qwen/QwQ-32B",
                    help="QA model for agent loop (loaded via vLLM)")
     p.add_argument("--output_dir",        type=str, default="./critic_lora_grpo")
@@ -290,6 +290,75 @@ def run_agent_loop(question: str, sub_questions: list, context: str, llm, qa_tok
     return extract_final_answer(outputs[0].outputs[0].text)
 
 
+def run_agent_loop_batch(question: str, plans: list, context: str, llm, qa_tok) -> list[str]:
+    """
+    Keep the same agent-loop logic as run_agent_loop, but execute the G candidate
+    plans for the SAME question together in vLLM batches.
+    """
+    sampling = SamplingParams(max_tokens=256, temperature=0.0)
+    num_plans = len(plans)
+    hop_answers = [[] for _ in range(num_plans)]
+
+    max_hops = 0
+    for plan in plans:
+        if len(plan) > max_hops:
+            max_hops = len(plan)
+
+    # Intermediate hops: batch all active plans at each hop index
+    for hop_idx in range(max_hops):
+        prompt_batch = []
+        active_plan_indices = []
+
+        for plan_idx, sub_questions in enumerate(plans):
+            if hop_idx >= len(sub_questions):
+                continue
+
+            sub_q_raw = sub_questions[hop_idx]
+            sub_q = replace_placeholders(sub_q_raw, hop_answers[plan_idx])
+
+            prompt_text = HOP_PROMPT.format(context=context, question=sub_q)
+            messages = [
+                {"role": "system", "content": HOP_SYSTEM_PROMPT},
+                {"role": "user",   "content": prompt_text},
+            ]
+            text = qa_tok.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+
+            prompt_batch.append(text)
+            active_plan_indices.append(plan_idx)
+
+        if len(prompt_batch) == 0:
+            continue
+
+        outputs = llm.generate(prompt_batch, sampling)
+
+        for out_idx, out in enumerate(outputs):
+            ans = extract_final_answer(out.outputs[0].text)
+            plan_idx = active_plan_indices[out_idx]
+            hop_answers[plan_idx].append(ans)
+
+    # Final synthesis: batch all candidate plans together
+    synth_batch = []
+    for plan_idx, sub_questions in enumerate(plans):
+        reasoning = build_reasoning_chain(sub_questions, hop_answers[plan_idx])
+        synth_text = SYNTHESIS_PROMPT.format(
+            context=context,
+            reasoning=reasoning,
+            question=question
+        )
+        messages = [
+            {"role": "system", "content": SYNTHESIS_SYSTEM_PROMPT},
+            {"role": "user",   "content": synth_text},
+        ]
+        text = qa_tok.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+        synth_batch.append(text)
+
+    outputs = llm.generate(synth_batch, sampling)
+    final_answers = []
+    for out in outputs:
+        final_answers.append(extract_final_answer(out.outputs[0].text))
+    return final_answers
+
+
 # ─────────────────────────────────────────────────────────────
 #  Critic reward assignment
 # ─────────────────────────────────────────────────────────────
@@ -330,6 +399,9 @@ def sample_critic_responses(
 ) -> list[dict]:
     """
     Sample `num_samples` responses from the Critic for one prompt.
+    Fast path:
+      - if temperature > 0, generate all samples in one batched call
+      - if temperature <= 0, switch to greedy decoding
     Returns list of dicts with keys: text, input_ids, response_ids, log_probs
     """
     enc = critic_tok(
@@ -340,37 +412,52 @@ def sample_critic_responses(
     ).to(critic_model.device)
     input_len = enc["input_ids"].shape[1]
 
+    do_sample = temperature is not None and temperature > 0.0
+    generate_kwargs = {
+        "max_new_tokens": max_new_tokens,
+        "pad_token_id": critic_tok.pad_token_id,
+        "return_dict_in_generate": True,
+        "output_scores": True,
+    }
+
+    if do_sample:
+        generate_kwargs["do_sample"] = True
+        generate_kwargs["temperature"] = temperature
+        generate_kwargs["top_p"] = 0.9
+        generate_kwargs["num_return_sequences"] = num_samples
+    else:
+        generate_kwargs["do_sample"] = False
+        generate_kwargs["num_return_sequences"] = 1
+
+    with torch.no_grad():
+        out = critic_model.generate(
+            **enc,
+            **generate_kwargs,
+        )
+
     results = []
-    for _ in range(num_samples):
-        with torch.no_grad():
-            out = critic_model.generate(
-                **enc,
-                max_new_tokens=max_new_tokens,
-                do_sample=True,
-                temperature=temperature,
-                top_p=0.9,
-                pad_token_id=critic_tok.pad_token_id,
-                return_dict_in_generate=True,
-                output_scores=True,
-            )
-        response_ids = out.sequences[0][input_len:]
+    total_sequences = out.sequences.shape[0]
+
+    for seq_idx in range(total_sequences):
+        response_ids = out.sequences[seq_idx][input_len:]
         text = critic_tok.decode(response_ids, skip_special_tokens=True).strip()
 
         # Compute per-token log probs for GRPO loss
-        # scores: list of (vocab_size,) tensors, one per generated token
         log_probs = []
         for step_idx, score_t in enumerate(out.scores):
-            if step_idx >= len(response_ids): break
+            if step_idx >= len(response_ids):
+                break
             token_id = response_ids[step_idx]
-            lp = F.log_softmax(score_t[0], dim=-1)[token_id]
+            lp = F.log_softmax(score_t[seq_idx], dim=-1)[token_id]
             log_probs.append(lp)
 
         results.append({
             "text":         text,
             "input_ids":    enc["input_ids"].clone(),
             "response_ids": response_ids.clone(),
-            "log_probs":    log_probs,  # list of scalar tensors
+            "log_probs":    log_probs,
         })
+
     return results
 
 
@@ -476,7 +563,9 @@ def train_one_stage(
         )
 
         # Step 4: Run full pipeline for each sample, collect rewards
-        group_rewards = []
+        final_plans = []
+        final_verdicts = []
+
         for sample in group_samples:
             verdict, feedback = parse_critic_output(sample["text"])
 
@@ -497,9 +586,16 @@ def train_one_stage(
                     if verdict == "ACCEPT":
                         break
 
-            pred_answer = run_agent_loop(question, final_plan, context, llm, qa_tok)
-            ans_score   = score_answer(pred_answer, ground_truth)
-            reward      = compute_critic_reward(verdict, ans_score)
+            final_plans.append(final_plan)
+            final_verdicts.append(verdict)
+
+        pred_answers = run_agent_loop_batch(question, final_plans, context, llm, qa_tok)
+
+        group_rewards = []
+        for idx, pred_answer in enumerate(pred_answers):
+            verdict = final_verdicts[idx]
+            ans_score = score_answer(pred_answer, ground_truth)
+            reward = compute_critic_reward(verdict, ans_score)
             group_rewards.append(reward)
 
             log_stats["em"].append(compute_em(pred_answer, ground_truth))
@@ -591,8 +687,9 @@ def main():
     qa_tok = AutoTokenizer.from_pretrained(args.qa_model)
     llm = LLM(
         model=args.qa_model, trust_remote_code=True,
-        gpu_memory_utilization=0.5, max_model_len=16000,
+        gpu_memory_utilization=0.8, max_model_len=16000,
         tensor_parallel_size=2,
+        max_num_seqs=max(args.batch_size * GRPO_GROUP_SIZE, 8),
     )
     print("QA model ready.")
 
