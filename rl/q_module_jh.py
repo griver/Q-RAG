@@ -3,6 +3,7 @@ from torch import nn, Tensor
 import torch
 from envs.utils import TextMemory, TextMemoryItem
 import copy
+from contextlib import nullcontext
 
 
 def logsumexp(inputs: Tensor, attention_mask: Tensor, dim=1, keepdim=False):
@@ -32,6 +33,7 @@ def hard_update(target, source):
 class DecomInnerProd(nn.Module):
     def __init__(self, n_decom_q=8, embed_dim=1024, num_heads=8, keep_orig=False):
         super().__init__()
+        self.prelin = nn.Linear(embed_dim, n_decom_q * embed_dim)
         self.decom = nn.MultiheadAttention(embed_dim=embed_dim, num_heads=num_heads, batch_first=True)
         # self.decom
         self.decom_q = nn.Parameter(torch.randn(1, n_decom_q, embed_dim) * 0.02)
@@ -48,7 +50,8 @@ class DecomInnerProd(nn.Module):
         # a_embed = a_embed.unsqueeze(1)
 
         decom_q = self.decom_q.expand(s_embed.shape[0], -1, -1)
-        decom_s_embed = self.decom(decom_q, s_embed, s_embed)[0] # B D H
+        _s_embed = self.prelin(s_embed).reshape(decom_q.shape)
+        decom_s_embed = self.decom(decom_q, _s_embed, _s_embed)[0] # B D H
         if self.keep_orig: decom_s_embed = torch.cat([s_embed, decom_s_embed], dim=1)
 
         logits_1s, logits_2s = [], []
@@ -57,9 +60,9 @@ class DecomInnerProd(nn.Module):
             for s_embed in decom_s_embed.unbind(dim=1):
                 logits_1s.append((s_embed * a_embed).sum(-1))
         
-            # print("in list", logits_1s[0].shape, logits_2s[0].shape)
+            # print("together in list", logits_1s[0].shape)
             logits_1 = torch.logsumexp(torch.stack(logits_1s, dim=0), dim=0)
-            # print("logits", logits_1.shape, logits_2.shape)
+            # print("together logits", logits_1.shape)
             logits_1 = logits_1.reshape(logits_shape)
             
             return logits_1 
@@ -79,6 +82,92 @@ class DecomInnerProd(nn.Module):
 
             return logits_1, logits_2 
 
+class PMMMat(nn.Module):
+    def __init__(self, d_embed=1024, d_mat=5, k=None):
+        super().__init__()
+        _d_mat = d_mat * (d_mat + 1) // 2
+        self.p = nn.Parameter(torch.randn(2, _d_mat))
+        self.s = nn.Parameter(torch.randn(2 * d_embed, _d_mat))
+
+        self.triu = torch.triu_indices(d_mat, d_mat)
+        self.d_mat = d_mat
+        if k is None: k = (d_mat + 1) // 2
+        self.k = k
+
+    def _mat(self, param):
+        M = torch.zeros(1, param.shape[0], self.d_mat, self.d_mat)
+        i, j = self.triu
+        M[..., i, j] = param
+        return M
+
+    def forward(self, s_embed, a_embed, together=False):
+        # print("In", s_embed.shape, a_embed.shape) 
+        # In torch.Size([1, 1, 1024]) torch.Size([1, 10, 1024])
+
+        # HACK?
+        logits_shape = a_embed.shape[:-1]
+        if s_embed.dim() == 3: s_embed = s_embed.view(-1, s_embed.shape[-1])#2 [1 512 1 1]
+        if a_embed.dim() == 3: a_embed = a_embed.view(-1, a_embed.shape[-1])
+        s_embed = s_embed.unsqueeze(-1).unsqueeze(-1)
+        a_embed = a_embed.unsqueeze(-1).unsqueeze(-1)
+        
+        P = self._mat(self.p).expand(s_embed.shape[0], -1, -1, -1)
+        S = self._mat(self.s).expand(a_embed.shape[0], -1, -1, -1)
+        # print(P.shape, S.shape, s_embed.shape, a_embed.shape)
+        
+        P = P.chunk(2, dim=1) #2 [1 1 5 5]
+        S = S.chunk(4, dim=1) #4 [10 512 5 5]
+        s_embed = s_embed.chunk(2, dim=1)
+        a_embed = a_embed.chunk(2, dim=1)
+
+        eig1 = torch.linalg.eigvalsh(P[0].squeeze(dim=1) + (s_embed[0] * S[0]).sum(dim=1) + (a_embed[0] * S[1]).sum(dim=1))[..., self.k].reshape(logits_shape)
+        eig2 = torch.linalg.eigvalsh(P[1].squeeze(dim=1) + (s_embed[1] * S[2]).sum(dim=1) + (a_embed[1] * S[3]).sum(dim=1))[..., self.k].reshape(logits_shape)
+
+        if together: return eig1 + eig2
+        return eig1, eig2
+
+        # s = self.lin(s_embed).unsqueeze(-1).unsqueeze(-1)
+        # a = self.lin(a_embed).unsqueeze(-1).unsqueeze(-1) # 10 2 1 1
+
+        # A = self._mat(self.A).unsqueeze(0).unsqueeze(0).expand(a_embed.shape[0], -1, -1, -1).to(s_embed.device)
+        # B = self._mat(self.B).unsqueeze(0).unsqueeze(0).expand(s_embed.shape[0], -1, -1, -1).to(s_embed.device)
+        # C = self._mat(self.C).unsqueeze(0).unsqueeze(0).expand(a_embed.shape[0], -1, -1, -1).to(s_embed.device)
+        # # print(s.shape,a.shape,A.shape,B.shape,C.shape)
+        # eig = torch.linalg.eigvalsh(A + s * B + a * C)[:, :, self.k]
+        
+        # if together: return eig.sum(dim=1).reshape(logits_shape)
+        # logit1, logit2 = eig.unbind(dim=1)
+        # return logit1.reshape(logits_shape), logit2.reshape(logits_shape)
+
+class GenIn(nn.Module):
+    def __init__(self, d_embed=1024):
+        super().__init__()
+        self.s = nn.Linear(d_embed, d_embed, bias=False)
+    
+    def forward(self, s_embed, a_embed, together=False):
+        # print("In", s_embed.shape, a_embed.shape) 
+        # In torch.Size([1, 1, 1024]) torch.Size([1, 10, 1024])
+
+        # HACK?
+        logits_shape = a_embed.shape[:-1]
+        if s_embed.dim() == 3: s_embed = s_embed.view(-1, s_embed.shape[-1])
+        if a_embed.dim() == 3: a_embed = a_embed.view(-1, a_embed.shape[-1])
+
+        s_embed = self.s(s_embed)
+        a_embed = self.s(a_embed)
+
+        if together:
+            return (s_embed * a_embed).sum(-1).reshape(logits_shape)
+
+        else:
+            D = s_embed.shape[-1] // 2
+            logits_1 = (s_embed[:, :D] * a_embed[:, :D]).sum(-1)
+            logits_2 = (s_embed[:, D:] * a_embed[:, D:]).sum(-1)
+
+            return logits_1.reshape(logits_shape), logits_2.reshape(logits_shape) 
+
+
+
 class TextQNet(nn.Module): # Critic
 
     def __init__(self, state_embed, action_embed, decom_inner_prod=None) -> None:
@@ -92,14 +181,17 @@ class TextQNet(nn.Module): # Critic
         self.decom_inner_prod = decom_inner_prod
 
     def forward(self, s: TextMemory, a: TextMemoryItem): 
-        # print(f'Embedder Input [input_ids shape={s.input_ids.shape}]')
-        s_embed = self.state_embed(input_ids=s.input_ids, attention_mask=s.attention_mask)
-        # print(f'Embedder Output [shape={s_embed.shape}, dtype={s_embed.dtype}, device={s_embed.device}]')
-        # self.action_embed.eval()
-        # print(f'Action Embedder Input [input_ids shape={a.input_ids.shape}]')
-        a_embed = self.action_embed(input_ids=a.input_ids, attention_mask=a.attention_mask, positions=a.position)["rope"]
-        # print(f'Action Embedder Output [shape={a_embed.shape}, dtype={a_embed.dtype}, device={a_embed.device}]')
-        # a_embed = self.action_embed.update_pos(a_embed, positions=a.position)
+        context = torch.no_grad() if isinstance(self.decom_inner_prod, (PMMMat, GenIn)) else nullcontext()
+
+        with context:
+            # print(f'Embedder Input [input_ids shape={s.input_ids.shape}]')
+            s_embed = self.state_embed(input_ids=s.input_ids, attention_mask=s.attention_mask)
+            # print(f'Embedder Output [shape={s_embed.shape}, dtype={s_embed.dtype}, device={s_embed.device}]')
+            # self.action_embed.eval()
+            # print(f'Action Embedder Input [input_ids shape={a.input_ids.shape}]')
+            a_embed = self.action_embed(input_ids=a.input_ids, attention_mask=a.attention_mask, positions=a.position)["rope"]
+            # print(f'Action Embedder Output [shape={a_embed.shape}, dtype={a_embed.dtype}, device={a_embed.device}]')
+            # a_embed = self.action_embed.update_pos(a_embed, positions=a.position)
 
         if self.decom_inner_prod is not None:
             logits_1, logits_2 = self.decom_inner_prod(s_embed, a_embed)
