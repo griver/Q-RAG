@@ -132,7 +132,7 @@ def parse_args():
     p.add_argument("--critic_base",       type=str, default="Qwen/Qwen2.5-7B-Instruct",
                    help="Base model for critic (trained from scratch with LoRA)")
     p.add_argument("--planner_base",      type=str, default="Qwen/Qwen2.5-7B-Instruct")
-    p.add_argument("--planner_lora",      type=str, default="./qwen_planner_lora_v2/final")
+    p.add_argument("--planner_lora",      type=str, default="./planner/qwen_planner_lora_v2")
     p.add_argument("--qa_model",          type=str, default="Qwen/QwQ-32B",
                    help="QA model for agent loop (loaded via vLLM)")
     p.add_argument("--output_dir",        type=str, default="./critic_lora_grpo")
