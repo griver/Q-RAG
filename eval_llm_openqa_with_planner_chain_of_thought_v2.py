@@ -325,7 +325,8 @@ if __name__ == "__main__":
 
     # per-sample retry counter; 0 = accepted on first attempt
     planner_retries = [0] * len(dataset)
-
+    
+    questions = [d["question"] for d in dataset]
     # First decomposition attempt (attempt 0)
     all_sub_questions = batch_decompose(
         questions, planner_model, planner_tokenizer, batch_size=args.planner_batch
