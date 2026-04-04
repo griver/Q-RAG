@@ -20,14 +20,17 @@ import os
 import re
 import string
 import argparse
-import copy
+import atexit
+import multiprocessing as mp
+import random
+from collections import defaultdict
+
 import torch
 import torch.nn.functional as F
-from collections import defaultdict
 from transformers import AutoModelForCausalLM, AutoTokenizer, get_cosine_schedule_with_warmup
 from peft import PeftModel, get_peft_model, LoraConfig, TaskType
 from tqdm.auto import tqdm
-from vllm import LLM, SamplingParams
+
 
 # ─────────────────────────────────────────────────────────────
 #  Constants — Planner (keep identical to eval script)
@@ -69,8 +72,6 @@ SYNTHESIS_PROMPT = (
 
 # ─────────────────────────────────────────────────────────────
 #  Critic system prompt
-#  The Critic ONLY sees: original question + proposed plan.
-#  It must output a structured verdict so we can parse it reliably.
 # ─────────────────────────────────────────────────────────────
 CRITIC_SYSTEM_PROMPT = (
     "You are a Plan Quality Critic. "
@@ -97,89 +98,301 @@ CRITIC_USER_PROMPT = (
 # ─────────────────────────────────────────────────────────────
 #  Training hyperparameters
 # ─────────────────────────────────────────────────────────────
-GRPO_GROUP_SIZE   = 4       # G: number of critic samples per question
-MAX_RETRIES       = 2       # max Planner re-plans on Reject
-LR                = 1e-5
-WARMUP_STEPS      = 50
-GRAD_CLIP         = 1.0
-KL_COEF           = 0.05    # KL penalty coefficient (keep Critic close to ref)
-REWARD_ACCEPT_CORRECT   =  1.0
-REWARD_ACCEPT_WRONG     = -1.0
-REWARD_REJECT_CORRECT   =  1.0
+GRPO_GROUP_SIZE = 4
+MAX_RETRIES = 2
+LR = 1e-5
+WARMUP_STEPS = 50
+GRAD_CLIP = 1.0
+KL_COEF = 0.05
+REWARD_ACCEPT_CORRECT = 1.0
+REWARD_ACCEPT_WRONG = -1.0
+REWARD_REJECT_CORRECT = 1.0
 REWARD_REJECT_STILL_BAD = -0.5
 
 # ─────────────────────────────────────────────────────────────
 #  Curriculum stage thresholds
-#  每个 stage 训练完后，在该 stage 的数据上评估
-#  EM 和 F1 都必须达标，才能进入下一阶段
-#  如果未达标，当前 stage 最多重复训练 MAX_STAGE_RETRAIN 次
 # ─────────────────────────────────────────────────────────────
 STAGE_THRESHOLDS = {
     1: {"EM": 0.45, "F1": 0.55},
     2: {"EM": 0.38, "F1": 0.48},
     3: {"EM": 0.30, "F1": 0.40},
 }
-MAX_STAGE_RETRAIN = 2   # 同一 stage 最多重训几次再强制进入下一阶段
+MAX_STAGE_RETRAIN = 2
 
+# ─────────────────────────────────────────────────────────────
+#  Device placement
+# ─────────────────────────────────────────────────────────────
+VLLM_GPU_ID = 0
+TRAIN_GPU_ID = 1
+TRAIN_DEVICE = f"cuda:{TRAIN_GPU_ID}"
+
+VLLM_GPU_MEMORY_UTILIZATION = 0.90
+VLLM_MAX_MODEL_LEN = 16000
+QA_MAX_TOKENS = 48
 
 # ─────────────────────────────────────────────────────────────
 #  Argument parsing
 # ─────────────────────────────────────────────────────────────
 def parse_args():
     p = argparse.ArgumentParser()
-    p.add_argument("--train_file",        type=str, required=True,
-                   help="JSONL with 'question', 'answer', 'pred_texts' fields")
-    p.add_argument("--critic_base",       type=str, default="Qwen/Qwen2.5-7B-Instruct",
-                   help="Base model for critic (trained from scratch with LoRA)")
-    p.add_argument("--planner_base",      type=str, default="Qwen/Qwen2.5-7B-Instruct")
-    p.add_argument("--planner_lora",      type=str, default="workspace/planner/qwen_planner_lora_v2")
-    p.add_argument("--qa_model",          type=str, default="Qwen/QwQ-32B",
-                   help="QA model for agent loop (loaded via vLLM)")
-    p.add_argument("--output_dir",        type=str, default="./critic_lora_grpo")
-    p.add_argument("--epochs",            type=int, default=3)
-    p.add_argument("--batch_size",        type=int, default=4,
-                   help="Questions per gradient update")
-    p.add_argument("--critic_temp",       type=float, default=0.8,
-                   help="Sampling temperature for GRPO group sampling")
-    p.add_argument("--max_new_tokens",    type=int, default=128)
-    p.add_argument("--save_every",        type=int, default=200)
-    p.add_argument("--log_every",         type=int, default=20)
+    p.add_argument(
+        "--train_file",
+        type=str,
+        required=True,
+        help="JSONL with 'question', 'answer', 'pred_texts' fields",
+    )
+    p.add_argument(
+        "--critic_base",
+        type=str,
+        default="Qwen/Qwen2.5-7B-Instruct",
+        help="Base model for critic (trained from scratch with LoRA)",
+    )
+    p.add_argument("--planner_base", type=str, default="Qwen/Qwen2.5-7B-Instruct")
+    p.add_argument("--planner_lora", type=str, default="./planner/qwen_planner_lora_v2")
+    p.add_argument(
+        "--qa_model",
+        type=str,
+        default="Qwen/QwQ-32B",
+        help="QA model for agent loop (loaded via vLLM)",
+    )
+    p.add_argument("--output_dir", type=str, default="./critic_lora_grpo")
+    p.add_argument("--epochs", type=int, default=3)
+    p.add_argument(
+        "--batch_size",
+        type=int,
+        default=4,
+        help="Questions per gradient update",
+    )
+    p.add_argument(
+        "--critic_temp",
+        type=float,
+        default=0.8,
+        help="Sampling temperature for GRPO group sampling",
+    )
+    p.add_argument("--max_new_tokens", type=int, default=128)
+    p.add_argument("--save_every", type=int, default=200)
+    p.add_argument("--log_every", type=int, default=20)
     return p.parse_args()
 
 
 # ─────────────────────────────────────────────────────────────
-#  Metric helpers (identical to eval script)
+#  Utility
+# ─────────────────────────────────────────────────────────────
+def get_model_device(model):
+    return next(model.parameters()).device
+
+def normalize_feedback(feedback: str | None):
+    if feedback is None:
+        return None
+    return " ".join(feedback.strip().split())
+
+
+# ─────────────────────────────────────────────────────────────
+#  vLLM worker on dedicated GPU0 process
+# ─────────────────────────────────────────────────────────────
+class _ProxyOutputItem:
+    def __init__(self, text: str):
+        self.text = text
+
+class _ProxyRequestOutput:
+    def __init__(self, prompt: str, texts):
+        self.prompt = prompt
+        self.outputs = [_ProxyOutputItem(t) for t in texts]
+
+def _serialize_sampling_params(sampling_params):
+    if isinstance(sampling_params, dict):
+        return dict(sampling_params)
+
+    payload = {
+        "max_tokens": getattr(sampling_params, "max_tokens", 256),
+        "temperature": getattr(sampling_params, "temperature", 0.0),
+    }
+
+    top_p = getattr(sampling_params, "top_p", None)
+    if top_p is not None:
+        payload["top_p"] = top_p
+
+    top_k = getattr(sampling_params, "top_k", None)
+    if top_k is not None:
+        payload["top_k"] = top_k
+
+    stop = getattr(sampling_params, "stop", None)
+    if stop is not None:
+        payload["stop"] = stop
+
+    return payload
+
+def _vllm_worker_main(
+    visible_gpu_id: int,
+    model_name: str,
+    trust_remote_code: bool,
+    gpu_memory_utilization: float,
+    max_model_len: int,
+    req_q,
+    resp_q,
+    ready_q,
+):
+    try:
+        os.environ["CUDA_VISIBLE_DEVICES"] = str(visible_gpu_id)
+        os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+
+        from vllm import LLM, SamplingParams
+
+        llm = LLM(
+            model=model_name,
+            trust_remote_code=trust_remote_code,
+            tensor_parallel_size=1,
+            gpu_memory_utilization=gpu_memory_utilization,
+            max_model_len=max_model_len,
+        )
+
+        ready_q.put({"ok": True})
+
+        while True:
+            msg = req_q.get()
+
+            if msg is None:
+                break
+
+            cmd = msg.get("cmd", "")
+            if cmd != "generate":
+                resp_q.put({"ok": False, "error": f"Unknown cmd: {cmd}"})
+                continue
+
+            sampling = SamplingParams(**msg["sampling"])
+            outputs = llm.generate(msg["prompts"], sampling)
+
+            payload = []
+            for out in outputs:
+                texts = [x.text for x in out.outputs]
+                payload.append(
+                    {
+                        "prompt": out.prompt,
+                        "texts": texts,
+                    }
+                )
+
+            resp_q.put({"ok": True, "payload": payload})
+
+    except Exception as e:
+        ready_q.put({"ok": False, "error": repr(e)})
+
+class VLLMProxy:
+    def __init__(
+        self,
+        visible_gpu_id: int,
+        model_name: str,
+        trust_remote_code: bool = True,
+        gpu_memory_utilization: float = 0.90,
+        max_model_len: int = 16000,
+    ):
+        self.ctx = mp.get_context("spawn")
+        self.req_q = self.ctx.Queue()
+        self.resp_q = self.ctx.Queue()
+        self.ready_q = self.ctx.Queue()
+
+        self.proc = self.ctx.Process(
+            target=_vllm_worker_main,
+            args=(
+                visible_gpu_id,
+                model_name,
+                trust_remote_code,
+                gpu_memory_utilization,
+                max_model_len,
+                self.req_q,
+                self.resp_q,
+                self.ready_q,
+            ),
+        )
+        self.proc.start()
+        self._ready = False
+
+    def wait_until_ready(self):
+        if self._ready:
+            return
+
+        msg = self.ready_q.get()
+        if not msg["ok"]:
+            raise RuntimeError(f"vLLM worker failed to start: {msg['error']}")
+        self._ready = True
+
+    def generate(self, prompts, sampling_params):
+        self.wait_until_ready()
+
+        sampling_dict = _serialize_sampling_params(sampling_params)
+
+        self.req_q.put(
+            {
+                "cmd": "generate",
+                "prompts": prompts,
+                "sampling": sampling_dict,
+            }
+        )
+
+        msg = self.resp_q.get()
+        if not msg["ok"]:
+            raise RuntimeError(f"vLLM generate failed: {msg['error']}")
+
+        results = []
+        for item in msg["payload"]:
+            results.append(_ProxyRequestOutput(item["prompt"], item["texts"]))
+        return results
+
+    def shutdown(self):
+        try:
+            self.req_q.put(None)
+        except Exception:
+            pass
+
+        if self.proc.is_alive():
+            self.proc.join(timeout=5)
+            if self.proc.is_alive():
+                self.proc.terminate()
+
+
+# ─────────────────────────────────────────────────────────────
+#  Metric helpers
 # ─────────────────────────────────────────────────────────────
 def normalize_answer(s: str) -> str:
-    def remove_articles(t): return re.sub(r"\b(a|an|the)\b", " ", t)
-    def white_space_fix(t): return " ".join(t.split())
+    def remove_articles(t):
+        return re.sub(r"\b(a|an|the)\b", " ", t)
+
+    def white_space_fix(t):
+        return " ".join(t.split())
+
     def remove_punc(t):
         exc = set(string.punctuation)
         return "".join(ch for ch in t if ch not in exc)
+
     return white_space_fix(remove_articles(remove_punc(s.lower().strip())))
+
+def counter_common(p, g):
+    from collections import Counter
+    pc = Counter(p)
+    gc = Counter(g)
+    return sum((pc & gc).values())
 
 def compute_f1(pred, gold):
     p_toks = normalize_answer(pred).split()
     g_toks = normalize_answer(gold).split()
-    common = Counter_common(p_toks, g_toks)
-    if not common: return 0.0
-    prec = common / len(p_toks) if p_toks else 0
-    rec  = common / len(g_toks) if g_toks else 0
-    return 2 * prec * rec / (prec + rec) if (prec + rec) > 0 else 0.0
+    common = counter_common(p_toks, g_toks)
+    if not common:
+        return 0.0
 
-def Counter_common(p, g):
-    from collections import Counter
-    pc, gc = Counter(p), Counter(g)
-    return sum((pc & gc).values())
+    prec = common / len(p_toks) if p_toks else 0.0
+    rec = common / len(g_toks) if g_toks else 0.0
+
+    if (prec + rec) == 0:
+        return 0.0
+    return 2 * prec * rec / (prec + rec)
 
 def compute_em(pred, gold):
     return int(normalize_answer(pred) == normalize_answer(gold))
 
 def score_answer(pred: str, gold: str) -> float:
-    """Combined EM + F1 reward in [0, 1]."""
     em = compute_em(pred, gold)
     f1 = compute_f1(pred, gold)
-    return max(em, f1)   # take best of EM / F1
+    return max(em, f1)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -214,12 +427,12 @@ def build_reasoning_chain(sub_questions, hop_answers):
 #  Critic output parser
 # ─────────────────────────────────────────────────────────────
 def parse_critic_output(text: str):
-    """
-    Returns (verdict: str, feedback: str | None)
-    verdict is 'ACCEPT' or 'REJECT'
-    """
-    verdict_match = re.search(r"<verdict>\s*(ACCEPT|REJECT)\s*</verdict>", text, re.IGNORECASE)
-    verdict  = verdict_match.group(1).upper() if verdict_match else "ACCEPT"  # default accept if malformed
+    verdict_match = re.search(
+        r"<verdict>\s*(ACCEPT|REJECT)\s*</verdict>",
+        text,
+        re.IGNORECASE,
+    )
+    verdict = verdict_match.group(1).upper() if verdict_match else "ACCEPT"
 
     feedback = None
     if verdict == "REJECT":
@@ -236,24 +449,39 @@ def parse_critic_output(text: str):
 def planner_decompose(question: str, planner_model, planner_tok, feedback: str = None) -> list:
     user_content = f"Decompose:\n{question}"
     if feedback:
-        user_content += f"\n\nPrevious plan was rejected. Feedback: {feedback}\nPlease revise the plan."
+        user_content += (
+            f"\n\nPrevious plan was rejected. Feedback: {feedback}\nPlease revise the plan."
+        )
 
     messages = [
         {"role": "system", "content": PLANNER_SYSTEM_PROMPT},
-        {"role": "user",   "content": user_content},
+        {"role": "user", "content": user_content},
     ]
     prompt = planner_tok.apply_chat_template(
-        messages, tokenize=False, add_generation_prompt=True
+        messages,
+        tokenize=False,
+        add_generation_prompt=True,
     )
-    enc = planner_tok(prompt, return_tensors="pt", truncation=True, max_length=512).to(planner_model.device)
+
+    planner_device = get_model_device(planner_model)
+    enc = planner_tok(
+        prompt,
+        return_tensors="pt",
+        truncation=True,
+        max_length=512,
+    ).to(planner_device)
+
     out = planner_model.generate(
         **enc,
         max_new_tokens=256,
         do_sample=False,
-        temperature=1.0,
         pad_token_id=planner_tok.pad_token_id,
     )
-    text = planner_tok.decode(out[0][enc["input_ids"].shape[1]:], skip_special_tokens=True)
+
+    text = planner_tok.decode(
+        out[0][enc["input_ids"].shape[1]:],
+        skip_special_tokens=True,
+    )
     return parse_steps(text)
 
 
@@ -261,118 +489,50 @@ def planner_decompose(question: str, planner_model, planner_tok, feedback: str =
 #  Agent Loop (QA execution using vLLM)
 # ─────────────────────────────────────────────────────────────
 def run_agent_loop(question: str, sub_questions: list, context: str, llm, qa_tok) -> str:
-    """Run multi-hop QA and return the final synthesised answer."""
-    sampling = SamplingParams(max_tokens=256, temperature=0.0)
+    sampling = {
+        "max_tokens": QA_MAX_TOKENS,
+        "temperature": 0.0,
+    }
+
     hop_answers = []
 
-    # Intermediate hops
     for sub_q_raw in sub_questions:
         sub_q = replace_placeholders(sub_q_raw, hop_answers)
+
         prompt_text = HOP_PROMPT.format(context=context, question=sub_q)
         messages = [
             {"role": "system", "content": HOP_SYSTEM_PROMPT},
-            {"role": "user",   "content": prompt_text},
+            {"role": "user", "content": prompt_text},
         ]
         text = qa_tok.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
         outputs = llm.generate([text], sampling)
         ans = extract_final_answer(outputs[0].outputs[0].text)
         hop_answers.append(ans)
 
-    # Synthesis
     reasoning = build_reasoning_chain(sub_questions, hop_answers)
-    synth_text = SYNTHESIS_PROMPT.format(context=context, reasoning=reasoning, question=question)
+    synth_text = SYNTHESIS_PROMPT.format(
+        context=context,
+        reasoning=reasoning,
+        question=question,
+    )
     messages = [
         {"role": "system", "content": SYNTHESIS_SYSTEM_PROMPT},
-        {"role": "user",   "content": synth_text},
+        {"role": "user", "content": synth_text},
     ]
     text = qa_tok.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
     outputs = llm.generate([text], sampling)
     return extract_final_answer(outputs[0].outputs[0].text)
 
 
-def run_agent_loop_batch(question: str, plans: list, context: str, llm, qa_tok) -> list[str]:
-    """
-    Keep the same agent-loop logic as run_agent_loop, but execute the G candidate
-    plans for the SAME question together in vLLM batches.
-    """
-    sampling = SamplingParams(max_tokens=256, temperature=0.0)
-    num_plans = len(plans)
-    hop_answers = [[] for _ in range(num_plans)]
-
-    max_hops = 0
-    for plan in plans:
-        if len(plan) > max_hops:
-            max_hops = len(plan)
-
-    # Intermediate hops: batch all active plans at each hop index
-    for hop_idx in range(max_hops):
-        prompt_batch = []
-        active_plan_indices = []
-
-        for plan_idx, sub_questions in enumerate(plans):
-            if hop_idx >= len(sub_questions):
-                continue
-
-            sub_q_raw = sub_questions[hop_idx]
-            sub_q = replace_placeholders(sub_q_raw, hop_answers[plan_idx])
-
-            prompt_text = HOP_PROMPT.format(context=context, question=sub_q)
-            messages = [
-                {"role": "system", "content": HOP_SYSTEM_PROMPT},
-                {"role": "user",   "content": prompt_text},
-            ]
-            text = qa_tok.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-
-            prompt_batch.append(text)
-            active_plan_indices.append(plan_idx)
-
-        if len(prompt_batch) == 0:
-            continue
-
-        outputs = llm.generate(prompt_batch, sampling)
-
-        for out_idx, out in enumerate(outputs):
-            ans = extract_final_answer(out.outputs[0].text)
-            plan_idx = active_plan_indices[out_idx]
-            hop_answers[plan_idx].append(ans)
-
-    # Final synthesis: batch all candidate plans together
-    synth_batch = []
-    for plan_idx, sub_questions in enumerate(plans):
-        reasoning = build_reasoning_chain(sub_questions, hop_answers[plan_idx])
-        synth_text = SYNTHESIS_PROMPT.format(
-            context=context,
-            reasoning=reasoning,
-            question=question
-        )
-        messages = [
-            {"role": "system", "content": SYNTHESIS_SYSTEM_PROMPT},
-            {"role": "user",   "content": synth_text},
-        ]
-        text = qa_tok.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-        synth_batch.append(text)
-
-    outputs = llm.generate(synth_batch, sampling)
-    final_answers = []
-    for out in outputs:
-        final_answers.append(extract_final_answer(out.outputs[0].text))
-    return final_answers
-
-
 # ─────────────────────────────────────────────────────────────
 #  Critic reward assignment
 # ─────────────────────────────────────────────────────────────
 def compute_critic_reward(verdict: str, answer_score: float, threshold: float = 0.5) -> float:
-    """
-    Compute scalar reward for the Critic's verdict.
-
-    Key design: Critic is rewarded for interventions that *causally* improve outcome.
-    We use a soft threshold (F1 >= 0.5 = "correct") for robustness.
-    """
     correct = answer_score >= threshold
+
     if verdict == "ACCEPT":
         return REWARD_ACCEPT_CORRECT if correct else REWARD_ACCEPT_WRONG
-    else:  # REJECT
+    else:
         return REWARD_REJECT_CORRECT if correct else REWARD_REJECT_STILL_BAD
 
 
@@ -384,11 +544,15 @@ def build_critic_prompt(question: str, plan: list, critic_tok) -> str:
     user_content = CRITIC_USER_PROMPT.format(question=question, plan=plan_text)
     messages = [
         {"role": "system", "content": CRITIC_SYSTEM_PROMPT},
-        {"role": "user",   "content": user_content},
+        {"role": "user", "content": user_content},
     ]
     return critic_tok.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
 
 
+# ─────────────────────────────────────────────────────────────
+#  Critic sampling
+#  Important: only sample here, do NOT use generate() scores for training.
+# ─────────────────────────────────────────────────────────────
 def sample_critic_responses(
     prompt: str,
     critic_model,
@@ -396,119 +560,161 @@ def sample_critic_responses(
     num_samples: int,
     temperature: float,
     max_new_tokens: int,
-) -> list[dict]:
-    """
-    Sample `num_samples` responses from the Critic for one prompt.
-    Fast path:
-      - if temperature > 0, generate all samples in one batched call
-      - if temperature <= 0, switch to greedy decoding
-    Returns list of dicts with keys: text, input_ids, response_ids, log_probs
-    """
+) -> list:
+    critic_device = get_model_device(critic_model)
+
     enc = critic_tok(
         prompt,
         return_tensors="pt",
         truncation=True,
         max_length=1024,
-    ).to(critic_model.device)
+    ).to(critic_device)
+
     input_len = enc["input_ids"].shape[1]
+    results = []
 
     do_sample = temperature is not None and temperature > 0.0
-    generate_kwargs = {
-        "max_new_tokens": max_new_tokens,
-        "pad_token_id": critic_tok.pad_token_id,
-        "return_dict_in_generate": True,
-        "output_scores": True,
-    }
 
-    if do_sample:
-        generate_kwargs["do_sample"] = True
-        generate_kwargs["temperature"] = temperature
-        generate_kwargs["top_p"] = 0.9
-        generate_kwargs["num_return_sequences"] = num_samples
-    else:
-        generate_kwargs["do_sample"] = False
-        generate_kwargs["num_return_sequences"] = 1
+    for _ in range(num_samples):
+        gen_kwargs = {
+            "max_new_tokens": max_new_tokens,
+            "pad_token_id": critic_tok.pad_token_id,
+            "return_dict_in_generate": True,
+            "output_scores": False,
+        }
 
-    with torch.no_grad():
-        out = critic_model.generate(
-            **enc,
-            **generate_kwargs,
-        )
+        if do_sample:
+            gen_kwargs["do_sample"] = True
+            gen_kwargs["temperature"] = temperature
+            gen_kwargs["top_p"] = 0.9
+        else:
+            gen_kwargs["do_sample"] = False
 
-    results = []
-    total_sequences = out.sequences.shape[0]
+        with torch.no_grad():
+            out = critic_model.generate(
+                **enc,
+                **gen_kwargs,
+            )
 
-    for seq_idx in range(total_sequences):
-        response_ids = out.sequences[seq_idx][input_len:]
+        response_ids = out.sequences[0][input_len:]
         text = critic_tok.decode(response_ids, skip_special_tokens=True).strip()
 
-        # Compute per-token log probs for GRPO loss
-        log_probs = []
-        for step_idx, score_t in enumerate(out.scores):
-            if step_idx >= len(response_ids):
-                break
-            token_id = response_ids[step_idx]
-            lp = F.log_softmax(score_t[seq_idx], dim=-1)[token_id]
-            log_probs.append(lp)
-
-        results.append({
-            "text":         text,
-            "input_ids":    enc["input_ids"].clone(),
-            "response_ids": response_ids.clone(),
-            "log_probs":    log_probs,
-        })
+        results.append(
+            {
+                "text": text,
+                "input_ids": enc["input_ids"].clone(),
+                "attention_mask": enc["attention_mask"].clone(),
+                "response_ids": response_ids.clone(),
+            }
+        )
 
     return results
+
+
+# ─────────────────────────────────────────────────────────────
+#  Recompute log p(response | prompt) with grad enabled
+# ─────────────────────────────────────────────────────────────
+def compute_response_logprob(model, input_ids, attention_mask, response_ids):
+    model_device = get_model_device(model)
+
+    input_ids = input_ids.to(model_device)
+
+    if attention_mask is None:
+        attention_mask = torch.ones_like(input_ids, device=model_device)
+    else:
+        attention_mask = attention_mask.to(model_device)
+
+    if response_ids.dim() == 1:
+        response_ids = response_ids.unsqueeze(0)
+    response_ids = response_ids.to(model_device)
+
+    full_ids = torch.cat([input_ids, response_ids], dim=1)
+
+    response_attention_mask = torch.ones_like(response_ids, device=model_device)
+    full_attention_mask = torch.cat([attention_mask, response_attention_mask], dim=1)
+
+    outputs = model(
+        input_ids=full_ids,
+        attention_mask=full_attention_mask,
+        use_cache=False,
+    )
+
+    prompt_len = input_ids.shape[1]
+
+    logits = outputs.logits[:, prompt_len - 1 : -1, :]
+    log_probs = F.log_softmax(logits, dim=-1)
+
+    token_log_probs = log_probs.gather(
+        dim=-1,
+        index=response_ids.unsqueeze(-1),
+    ).squeeze(-1)
+
+    return token_log_probs.sum()
 
 
 # ─────────────────────────────────────────────────────────────
 #  GRPO loss
 # ─────────────────────────────────────────────────────────────
 def grpo_loss(
-    samples: list[dict],
-    rewards: list[float],
+    samples: list,
+    rewards: list,
+    critic_model,
     ref_model,
-    critic_tok,
     kl_coef: float = KL_COEF,
 ) -> torch.Tensor:
-    """
-    GRPO (Group Relative Policy Optimisation) loss for one group.
+    critic_device = get_model_device(critic_model)
 
-    Advantage = (r - mean(r)) / (std(r) + eps)   — normalised within group
-    Loss = -mean_over_group( advantage * sum_log_probs ) + kl_coef * KL(policy || ref)
-    """
-    rewards_t = torch.tensor(rewards, dtype=torch.float32)
-    mean_r    = rewards_t.mean()
-    std_r     = rewards_t.std() + 1e-8
-    advantages = (rewards_t - mean_r) / std_r   # shape (G,)
+    rewards_t = torch.tensor(rewards, dtype=torch.float32, device=critic_device)
+    mean_r = rewards_t.mean()
+    std_r = rewards_t.std(unbiased=False)
+    advantages = (rewards_t - mean_r) / (std_r + 1e-8)
 
-    total_loss = torch.tensor(0.0, requires_grad=True)
-    total_loss = total_loss.to(next(ref_model.parameters()).device)
+    total_loss = None
+    valid_count = 0
 
     for sample, adv in zip(samples, advantages):
-        if not sample["log_probs"]:
+        response_ids = sample["response_ids"]
+        if response_ids.numel() == 0:
             continue
-        sum_log_prob = torch.stack(sample["log_probs"]).sum()   # policy log prob
 
-        # KL penalty: compare to reference model
+        sum_log_prob = compute_response_logprob(
+            critic_model,
+            sample["input_ids"],
+            sample["attention_mask"],
+            response_ids,
+        )
+
         with torch.no_grad():
-            input_ids = sample["input_ids"]
-            resp_ids  = sample["response_ids"].unsqueeze(0)
-            full_ids  = torch.cat([input_ids, resp_ids], dim=1)
-            ref_out   = ref_model(full_ids)
-            ref_logits = ref_out.logits[0, input_ids.shape[1]-1:-1]  # align to response
-            ref_lp    = F.log_softmax(ref_logits, dim=-1)
-            ref_sum_lp = ref_lp[range(len(sample["response_ids"])), sample["response_ids"]].sum()
+            ref_sum_log_prob = compute_response_logprob(
+                ref_model,
+                sample["input_ids"],
+                sample["attention_mask"],
+                response_ids,
+            )
 
-        kl = sum_log_prob - ref_sum_lp   # positive if policy diverges from ref
+        kl = sum_log_prob - ref_sum_log_prob.to(sum_log_prob.device)
 
-        # GRPO policy gradient loss
-        pg_loss   = -adv.to(sum_log_prob.device) * sum_log_prob
+        pg_loss = -adv * sum_log_prob
         sample_loss = pg_loss + kl_coef * kl
 
-        total_loss = total_loss + sample_loss
+        if total_loss is None:
+            total_loss = sample_loss
+        else:
+            total_loss = total_loss + sample_loss
 
-    return total_loss / max(len(samples), 1)
+        valid_count += 1
+
+    if valid_count == 0:
+        dummy = None
+        for p in critic_model.parameters():
+            if p.requires_grad:
+                dummy = p
+                break
+        if dummy is None:
+            raise RuntimeError("No trainable parameters found in critic_model.")
+        return dummy.sum() * 0.0
+
+    return total_loss / valid_count
 
 
 # ─────────────────────────────────────────────────────────────
@@ -528,72 +734,93 @@ def train_one_stage(
     scheduler,
     args,
     global_step: int,
-) -> tuple[int, dict]:
-    """
-    训练一个 stage，返回 (更新后的 global_step, 该 stage 的最终指标)。
-    指标格式: {"EM": float, "F1": float, "avg_reward": float, "accept_rate": float}
-    """
-    import random
+):
     random.shuffle(stage_data)
 
-    log_stats      = defaultdict(list)
-    batch_loss_acc = torch.tensor(0.0)
+    log_stats = defaultdict(list)
+    batch_loss_acc = 0.0
     optimizer.zero_grad()
 
+    planner_cache = {}
+    critic_review_cache = {}
+    agent_loop_cache = {}
+
+    def cached_planner(question, feedback=None):
+        key = (question, normalize_feedback(feedback))
+        if key not in planner_cache:
+            planner_cache[key] = planner_decompose(
+                question,
+                planner_model,
+                planner_tok,
+                feedback=feedback,
+            )
+        return planner_cache[key]
+
+    def cached_zero_temp_critic(question, final_plan):
+        prompt = build_critic_prompt(question, final_plan, critic_tok)
+        if prompt not in critic_review_cache:
+            re_samples = sample_critic_responses(
+                prompt,
+                critic_model,
+                critic_tok,
+                num_samples=1,
+                temperature=0.0,
+                max_new_tokens=args.max_new_tokens,
+            )
+            critic_review_cache[prompt] = parse_critic_output(re_samples[0]["text"])
+        return critic_review_cache[prompt]
+
+    def cached_agent_loop(question, final_plan, context):
+        key = (question, tuple(final_plan), context)
+        if key not in agent_loop_cache:
+            agent_loop_cache[key] = run_agent_loop(
+                question,
+                final_plan,
+                context,
+                llm,
+                qa_tok,
+            )
+        return agent_loop_cache[key]
+
     for sample_idx, data in enumerate(tqdm(stage_data, desc=f"  Stage {stage_id} training")):
-        question     = data["question"]
+        question = data["question"]
         ground_truth = data["answer"]
-        context      = "\n\n---\n\n".join(data["pred_texts"])
+        context = "\n\n---\n\n".join(data["pred_texts"])
 
         # Step 1: Planner → initial plan
-        initial_plan = planner_decompose(question, planner_model, planner_tok)
+        initial_plan = cached_planner(question)
         if not initial_plan:
             continue
 
         # Step 2: Build critic prompt
         critic_prompt = build_critic_prompt(question, initial_plan, critic_tok)
 
-        # Step 3: Sample G critic responses (GRPO group)
+        # Step 3: Sample G critic responses
         critic_model.train()
         group_samples = sample_critic_responses(
-            critic_prompt, critic_model, critic_tok,
+            critic_prompt,
+            critic_model,
+            critic_tok,
             num_samples=GRPO_GROUP_SIZE,
             temperature=args.critic_temp,
             max_new_tokens=args.max_new_tokens,
         )
 
         # Step 4: Run full pipeline for each sample, collect rewards
-        final_plans = []
-        final_verdicts = []
-
+        group_rewards = []
         for sample in group_samples:
             verdict, feedback = parse_critic_output(sample["text"])
 
             final_plan = initial_plan
             for _ in range(MAX_RETRIES if verdict == "REJECT" else 0):
-                revised = planner_decompose(
-                    question, planner_model, planner_tok, feedback=feedback
-                )
+                revised = cached_planner(question, feedback=feedback)
                 if revised:
                     final_plan = revised
-                    re_prompt  = build_critic_prompt(question, final_plan, critic_tok)
-                    re_samples = sample_critic_responses(
-                        re_prompt, critic_model, critic_tok,
-                        num_samples=1, temperature=0.0,
-                        max_new_tokens=args.max_new_tokens,
-                    )
-                    verdict, feedback = parse_critic_output(re_samples[0]["text"])
+                    verdict, feedback = cached_zero_temp_critic(question, final_plan)
                     if verdict == "ACCEPT":
                         break
 
-            final_plans.append(final_plan)
-            final_verdicts.append(verdict)
-
-        pred_answers = run_agent_loop_batch(question, final_plans, context, llm, qa_tok)
-
-        group_rewards = []
-        for idx, pred_answer in enumerate(pred_answers):
-            verdict = final_verdicts[idx]
+            pred_answer = cached_agent_loop(question, final_plan, context)
             ans_score = score_answer(pred_answer, ground_truth)
             reward = compute_critic_reward(verdict, ans_score)
             group_rewards.append(reward)
@@ -604,16 +831,21 @@ def train_one_stage(
             log_stats["verdict"].append(1 if verdict == "ACCEPT" else 0)
 
         # Step 5: GRPO loss
-        loss = grpo_loss(group_samples, group_rewards, ref_model, critic_tok)
+        loss = grpo_loss(
+            group_samples,
+            group_rewards,
+            critic_model,
+            ref_model,
+        )
         loss = loss / args.batch_size
         loss.backward()
-        batch_loss_acc += loss.item()
+        batch_loss_acc += float(loss.item())
 
         # Step 6: Gradient update
         if (sample_idx + 1) % args.batch_size == 0:
             torch.nn.utils.clip_grad_norm_(
                 filter(lambda p: p.requires_grad, critic_model.parameters()),
-                GRAD_CLIP
+                GRAD_CLIP,
             )
             optimizer.step()
             scheduler.step()
@@ -621,17 +853,18 @@ def train_one_stage(
             global_step += 1
 
             if global_step % args.log_every == 0:
-                window    = 50
-                avg_em    = sum(log_stats["em"][-window:])     / max(len(log_stats["em"][-window:]), 1)
-                avg_f1    = sum(log_stats["f1"][-window:])     / max(len(log_stats["f1"][-window:]), 1)
-                avg_rew   = sum(log_stats["reward"][-window:]) / max(len(log_stats["reward"][-window:]), 1)
-                acc_rate  = sum(log_stats["verdict"][-window:])/ max(len(log_stats["verdict"][-window:]), 1)
+                window = 50
+                avg_em = sum(log_stats["em"][-window:]) / max(len(log_stats["em"][-window:]), 1)
+                avg_f1 = sum(log_stats["f1"][-window:]) / max(len(log_stats["f1"][-window:]), 1)
+                avg_rew = sum(log_stats["reward"][-window:]) / max(len(log_stats["reward"][-window:]), 1)
+                acc_rate = sum(log_stats["verdict"][-window:]) / max(len(log_stats["verdict"][-window:]), 1)
+
                 print(
-                    f"    Step {global_step:5d} | loss={batch_loss_acc.item():.4f} | "
+                    f"    Step {global_step:5d} | loss={batch_loss_acc:.4f} | "
                     f"EM={avg_em:.3f}  F1={avg_f1:.3f} | "
                     f"reward={avg_rew:.3f} | accept_rate={acc_rate:.2f}"
                 )
-                batch_loss_acc = torch.tensor(0.0)
+                batch_loss_acc = 0.0
 
             if global_step % args.save_every == 0:
                 ckpt = os.path.join(args.output_dir, f"stage{stage_id}_step{global_step}")
@@ -639,22 +872,28 @@ def train_one_stage(
                 critic_tok.save_pretrained(ckpt)
                 print(f"    Checkpoint saved → {ckpt}")
 
-    # ── Compute final stage metrics (over ALL samples seen this stage) ──
     final_metrics = {
-        "EM":          sum(log_stats["em"])      / max(len(log_stats["em"]), 1),
-        "F1":          sum(log_stats["f1"])      / max(len(log_stats["f1"]), 1),
-        "avg_reward":  sum(log_stats["reward"])  / max(len(log_stats["reward"]), 1),
+        "EM": sum(log_stats["em"]) / max(len(log_stats["em"]), 1),
+        "F1": sum(log_stats["f1"]) / max(len(log_stats["f1"]), 1),
+        "avg_reward": sum(log_stats["reward"]) / max(len(log_stats["reward"]), 1),
         "accept_rate": sum(log_stats["verdict"]) / max(len(log_stats["verdict"]), 1),
     }
     return global_step, final_metrics
 
 
 # ─────────────────────────────────────────────────────────────
-#  Main training loop  (curriculum-gated)
+#  Main training loop (curriculum-gated)
 # ─────────────────────────────────────────────────────────────
 def main():
     args = parse_args()
     os.makedirs(args.output_dir, exist_ok=True)
+
+    if not torch.cuda.is_available():
+        raise RuntimeError("CUDA is not available.")
+    if torch.cuda.device_count() < 2:
+        raise RuntimeError(
+            f"This script expects 2 GPUs, but found {torch.cuda.device_count()}."
+        )
 
     # ── Load dataset, split by stage ─────────────────────────
     print(f"Loading {args.train_file} ...")
@@ -668,129 +907,171 @@ def main():
     for s in sorted(stage_data):
         print(f"  Stage {s}: {len(stage_data[s])} samples")
 
-    # ── Load Planner (frozen) ─────────────────────────────────
-    print("\n[1/4] Loading Planner (frozen) ...")
+    # ── Step 1: vLLM FIRST on GPU0 ───────────────────────────
+    print("\n[1/4] Loading QA model via vLLM on GPU0 FIRST ...")
+    qa_tok = AutoTokenizer.from_pretrained(args.qa_model, trust_remote_code=True)
+
+    llm = VLLMProxy(
+        visible_gpu_id=VLLM_GPU_ID,
+        model_name=args.qa_model,
+        trust_remote_code=True,
+        gpu_memory_utilization=VLLM_GPU_MEMORY_UTILIZATION,
+        max_model_len=VLLM_MAX_MODEL_LEN,
+    )
+    atexit.register(llm.shutdown)
+
+    llm.wait_until_ready()
+    print("QA model ready on GPU0.")
+
+    # ── Step 2: lock main process to GPU1 ────────────────────
+    torch.cuda.set_device(TRAIN_GPU_ID)
+
+    # ── Load Planner (frozen) on GPU1 ────────────────────────
+    print("\n[2/4] Loading Planner (frozen) on GPU1 ...")
     planner_tok = AutoTokenizer.from_pretrained(args.planner_base, trust_remote_code=True)
     planner_tok.pad_token = planner_tok.eos_token
     planner_tok.padding_side = "left"
+
     planner_base_model = AutoModelForCausalLM.from_pretrained(
-        args.planner_base, torch_dtype=torch.bfloat16, device_map="auto"
+        args.planner_base,
+        torch_dtype=torch.bfloat16,
+        device_map={"": TRAIN_GPU_ID},
+        low_cpu_mem_usage=True,
+        trust_remote_code=True,
     )
     planner_model = PeftModel.from_pretrained(planner_base_model, args.planner_lora)
     planner_model.eval()
     for p in planner_model.parameters():
         p.requires_grad_(False)
-    print("Planner ready (frozen).")
+    print("Planner ready on GPU1 (frozen).")
 
-    # ── Load QA model ─────────────────────────────────────────
-    print("\n[2/4] Loading QA model via vLLM ...")
-    qa_tok = AutoTokenizer.from_pretrained(args.qa_model)
-    llm = LLM(
-        model=args.qa_model, trust_remote_code=True,
-        gpu_memory_utilization=0.8, max_model_len=16000,
-        tensor_parallel_size=2,
-        max_num_seqs=max(args.batch_size * GRPO_GROUP_SIZE, 8),
-    )
-    print("QA model ready.")
-
-    # ── Load Critic (trainable) + reference ──────────────────
-    print("\n[3/4] Loading Critic model ...")
+    # ── Load Critic (trainable) on GPU1 ──────────────────────
+    print("\n[3/4] Loading Critic on GPU1 ...")
     critic_tok = AutoTokenizer.from_pretrained(args.critic_base, trust_remote_code=True)
     critic_tok.pad_token = critic_tok.eos_token
+    critic_tok.padding_side = "left"
 
     critic_base_model = AutoModelForCausalLM.from_pretrained(
-        args.critic_base, torch_dtype=torch.bfloat16, device_map="auto"
+        args.critic_base,
+        torch_dtype=torch.bfloat16,
+        device_map={"": TRAIN_GPU_ID},
+        low_cpu_mem_usage=True,
+        trust_remote_code=True,
     )
     lora_cfg = LoraConfig(
-        task_type=TaskType.CAUSAL_LM, r=16, lora_alpha=32,
+        task_type=TaskType.CAUSAL_LM,
+        r=16,
+        lora_alpha=32,
         lora_dropout=0.05,
         target_modules=["q_proj", "v_proj", "k_proj", "o_proj"],
         bias="none",
     )
     critic_model = get_peft_model(critic_base_model, lora_cfg)
     critic_model.print_trainable_parameters()
+    print("Critic ready on GPU1.")
 
+    # ── Load Ref model on GPU1 ───────────────────────────────
+    print("\n[4/4] Loading Ref model on GPU1 ...")
     ref_model = AutoModelForCausalLM.from_pretrained(
-        args.critic_base, torch_dtype=torch.bfloat16, device_map="auto"
+        args.critic_base,
+        torch_dtype=torch.bfloat16,
+        device_map={"": TRAIN_GPU_ID},
+        low_cpu_mem_usage=True,
+        trust_remote_code=True,
     )
     ref_model.eval()
     for p in ref_model.parameters():
         p.requires_grad_(False)
-    print("Critic ready.")
+    print("Ref model ready on GPU1.")
 
-    # ── Optimiser & scheduler ─────────────────────────────────
+    # ── Optimiser & scheduler ────────────────────────────────
     total_samples = sum(len(v) for v in stage_data.values())
-    total_steps   = (total_samples * args.epochs) // args.batch_size
+    total_steps = max((total_samples * args.epochs) // args.batch_size, 1)
+
     optimizer = torch.optim.AdamW(
         filter(lambda p: p.requires_grad, critic_model.parameters()),
-        lr=LR, weight_decay=0.01,
+        lr=LR,
+        weight_decay=0.01,
     )
-    scheduler = get_cosine_schedule_with_warmup(optimizer, WARMUP_STEPS, total_steps)
+    scheduler = get_cosine_schedule_with_warmup(
+        optimizer,
+        WARMUP_STEPS,
+        total_steps,
+    )
 
-    # ── Curriculum-gated training ─────────────────────────────
-    print(f"\n[4/4] Starting curriculum GRPO | epochs={args.epochs} | "
-          f"batch={args.batch_size} | G={GRPO_GROUP_SIZE}")
+    # ── Curriculum-gated training ────────────────────────────
+    print(
+        f"\nStarting curriculum GRPO | epochs={args.epochs} | "
+        f"batch={args.batch_size} | G={GRPO_GROUP_SIZE} | "
+        f"vLLM=GPU0 | planner/critic/ref=GPU1 | qa_max_tokens={QA_MAX_TOKENS}"
+    )
 
-    global_step   = 0
-    training_log  = []   # records per-stage metrics for the final report
+    global_step = 0
+    training_log = []
 
     for stage_id in sorted(stage_data.keys()):
-        threshold  = STAGE_THRESHOLDS.get(stage_id, {"EM": 0.0, "F1": 0.0})
+        threshold = STAGE_THRESHOLDS.get(stage_id, {"EM": 0.0, "F1": 0.0})
         retrain_ct = 0
-        passed     = False
+        passed = False
 
-        print(f"\n{'='*55}")
+        print(f"\n{'=' * 55}")
         print(f"  STAGE {stage_id}  |  target EM≥{threshold['EM']}  F1≥{threshold['F1']}")
         print(f"  samples: {len(stage_data[stage_id])}")
-        print(f"{'='*55}")
+        print(f"{'=' * 55}")
 
         while not passed and retrain_ct <= MAX_STAGE_RETRAIN:
             if retrain_ct > 0:
-                print(f"\n  [Stage {stage_id}] Threshold not met — retraining "
-                      f"(attempt {retrain_ct}/{MAX_STAGE_RETRAIN}) ...")
-
-            for epoch in range(args.epochs):
-                print(f"\n  Epoch {epoch+1}/{args.epochs}")
-                global_step, metrics = train_one_stage(
-                    stage_data   = stage_data[stage_id],
-                    stage_id     = stage_id,
-                    critic_model = critic_model,
-                    critic_tok   = critic_tok,
-                    ref_model    = ref_model,
-                    planner_model= planner_model,
-                    planner_tok  = planner_tok,
-                    llm          = llm,
-                    qa_tok       = qa_tok,
-                    optimizer    = optimizer,
-                    scheduler    = scheduler,
-                    args         = args,
-                    global_step  = global_step,
+                print(
+                    f"\n  [Stage {stage_id}] Threshold not met — retraining "
+                    f"(attempt {retrain_ct}/{MAX_STAGE_RETRAIN}) ..."
                 )
 
-            # ── Stage evaluation ──────────────────────────────
+            for epoch in range(args.epochs):
+                print(f"\n  Epoch {epoch + 1}/{args.epochs}")
+                global_step, metrics = train_one_stage(
+                    stage_data=stage_data[stage_id],
+                    stage_id=stage_id,
+                    critic_model=critic_model,
+                    critic_tok=critic_tok,
+                    ref_model=ref_model,
+                    planner_model=planner_model,
+                    planner_tok=planner_tok,
+                    llm=llm,
+                    qa_tok=qa_tok,
+                    optimizer=optimizer,
+                    scheduler=scheduler,
+                    args=args,
+                    global_step=global_step,
+                )
+
             em_ok = metrics["EM"] >= threshold["EM"]
             f1_ok = metrics["F1"] >= threshold["F1"]
             passed = em_ok and f1_ok
 
             status = "PASSED ✓" if passed else "FAILED ✗"
-            print(f"\n  Stage {stage_id} result: "
-                  f"EM={metrics['EM']:.4f} (≥{threshold['EM']}) {'✓' if em_ok else '✗'}  |  "
-                  f"F1={metrics['F1']:.4f} (≥{threshold['F1']}) {'✓' if f1_ok else '✗'}  "
-                  f"→ {status}")
-            print(f"  avg_reward={metrics['avg_reward']:.3f}  "
-                  f"accept_rate={metrics['accept_rate']:.2f}")
+            print(
+                f"\n  Stage {stage_id} result: "
+                f"EM={metrics['EM']:.4f} (≥{threshold['EM']}) {'✓' if em_ok else '✗'}  |  "
+                f"F1={metrics['F1']:.4f} (≥{threshold['F1']}) {'✓' if f1_ok else '✗'}  "
+                f"→ {status}"
+            )
+            print(
+                f"  avg_reward={metrics['avg_reward']:.3f}  "
+                f"accept_rate={metrics['accept_rate']:.2f}"
+            )
 
-            training_log.append({
-                "stage":       stage_id,
-                "retrain_attempt": retrain_ct,
-                **metrics,
-                "passed": passed,
-            })
+            training_log.append(
+                {
+                    "stage": stage_id,
+                    "retrain_attempt": retrain_ct,
+                    **metrics,
+                    "passed": passed,
+                }
+            )
 
-            # Save stage checkpoint regardless of pass/fail
             stage_ckpt = os.path.join(
                 args.output_dir,
-                f"stage{stage_id}_attempt{retrain_ct}_{'pass' if passed else 'fail'}"
+                f"stage{stage_id}_attempt{retrain_ct}_{'pass' if passed else 'fail'}",
             )
             critic_model.save_pretrained(stage_ckpt)
             critic_tok.save_pretrained(stage_ckpt)
@@ -799,32 +1080,37 @@ def main():
             retrain_ct += 1
 
         if not passed:
-            print(f"\n  WARNING: Stage {stage_id} did not meet threshold after "
-                  f"{MAX_STAGE_RETRAIN} retrains. Proceeding to next stage anyway.")
+            print(
+                f"\n  WARNING: Stage {stage_id} did not meet threshold after "
+                f"{MAX_STAGE_RETRAIN} retrains. Proceeding to next stage anyway."
+            )
 
     # ── Final save ────────────────────────────────────────────
     final_dir = os.path.join(args.output_dir, "final")
     critic_model.save_pretrained(final_dir)
     critic_tok.save_pretrained(final_dir)
 
-    # ── Training summary ─────────────────────────────────────
+    # ── Training summary ──────────────────────────────────────
     print("\n" + "=" * 55)
     print("  TRAINING COMPLETE — CURRICULUM SUMMARY")
     print("=" * 55)
     for entry in training_log:
         tag = "PASS" if entry["passed"] else "FAIL"
-        print(f"  Stage {entry['stage']} attempt {entry['retrain_attempt']} | "
-              f"EM={entry['EM']:.4f}  F1={entry['F1']:.4f}  "
-              f"reward={entry['avg_reward']:.3f}  [{tag}]")
+        print(
+            f"  Stage {entry['stage']} attempt {entry['retrain_attempt']} | "
+            f"EM={entry['EM']:.4f}  F1={entry['F1']:.4f}  "
+            f"reward={entry['avg_reward']:.3f}  [{tag}]"
+        )
 
-    # Save log to JSON
     log_path = os.path.join(args.output_dir, "training_log.json")
-    with open(log_path, "w") as f:
-        json.dump(training_log, f, indent=2)
+    with open(log_path, "w", encoding="utf-8") as f:
+        json.dump(training_log, f, indent=2, ensure_ascii=False)
+
     print(f"\n  Log saved → {log_path}")
     print(f"  Final model → {final_dir}")
     print("=" * 55)
 
 
 if __name__ == "__main__":
+    mp.set_start_method("spawn", force=True)
     main()
