@@ -26,6 +26,7 @@ PLANNER_SYSTEM_PROMPT = (
 #  QA prompts
 # ─────────────────────────────────────────────
 
+
 # Used for each intermediate hop sub-question
 HOP_SYSTEM_PROMPT = (
     "Answer the question based on the given passages.\n"
@@ -125,8 +126,8 @@ def replace_placeholders(question: str, hop_answers: list) -> str:
 
 def extract_final_answer(text: str) -> str:
     if "Final answer:" in text:
-        return text.split("Final answer:")[-1].strip()
-    return text.strip()
+        text = text.split("Final answer:")[-1].strip()
+    return text.replace("[your final answer]", "").replace("[Your final answer]", "").strip()
 
 def build_reasoning_chain(sub_questions: list, hop_answers: list) -> str:
     """

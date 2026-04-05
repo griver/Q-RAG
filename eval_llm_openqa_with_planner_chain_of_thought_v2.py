@@ -16,10 +16,10 @@ python eval_llm_openqa_with_planner_chain_of_thought_v2.py    \
 ### 4090 ####
 CUDA_VISIBLE_DEVICES=0 python eval_llm_openqa_with_planner_chain_of_thought_v2.py    \
 --file_path ./runs/QRAG_hotpotqa_4090_24h15m_50/eval_seed42.jsonl   \
---model_name Qwen/QwQ-32B   \
+--model_name Qwen/Qwen2.5-7B-Instruct   \
 --planner_base Qwen/Qwen2.5-7B-Instruct    \
---planner_lora /workspace/planner/final    \
---output_file_path ./runs/QRAG_hotpotqa_4090_24h15m_50/llm-answering_qwenplanner_eval_CoT_Retires.json
+--planner_lora /home/ai-faculty/workspace/planner/qwen_planner_lora_v2_musique_cleaned_v2/final    \
+--output_file_path ./runs/QRAG_hotpotqa_4090_24h15m_50/llm-answering_qwen-planner-clean_eval_CoT_Retires.json
 '''
 
 
@@ -89,7 +89,7 @@ def parse_args():
     parser.add_argument("--output_file_path", type=str, default=None)
     parser.add_argument("--max_hops",         type=int, default=4,
                         help="Safety cap on number of intermediate hops")
-    parser.add_argument("--max_retries",      type=int, default=2,
+    parser.add_argument("--max_retries",      type=int, default=0,
                         help="Number of extra attempts for the planner to reduce hops below the limit")
     parser.add_argument("--planner_batch",    type=int, default=16)
     return parser.parse_args()
@@ -223,8 +223,8 @@ def replace_placeholders(question: str, hop_answers: list) -> str:
 # └─────────────────────┴──────────────────────┴────────────────────────┘
 def extract_final_answer(text: str) -> str:
     if "Final answer:" in text:
-        return text.split("Final answer:")[-1].strip()
-    return text.strip()
+        text = text.split("Final answer:")[-1].strip()
+    return text.replace("[your final answer]", "").replace("[Your final answer]", "").strip()
 
 def build_reasoning_chain(sub_questions: list, hop_answers: list) -> str:
     """
@@ -359,11 +359,19 @@ if __name__ == "__main__":
                 print(f"  sample {orig_i}: {len(old_sq)} hops -> {len(new_sq)} hops (kept old, {len(old_sq)} hops)")
 
     # Final check — report samples that are still over the limit after all retries
+    # still_over = [i for i, sq in enumerate(all_sub_questions) if len(sq) > MAX_HOPS_LIMIT]
+    # if still_over:
+    #     print(f"\n[Warning] {len(still_over)} sample(s) still exceed {MAX_HOPS_LIMIT} hops "
+    #           f"after {MAX_RETRIES} retries. Using the shortest result obtained for each.")
+
     still_over = [i for i, sq in enumerate(all_sub_questions) if len(sq) > MAX_HOPS_LIMIT]
     if still_over:
+        FORCE_CAP = 5
         print(f"\n[Warning] {len(still_over)} sample(s) still exceed {MAX_HOPS_LIMIT} hops "
-              f"after {MAX_RETRIES} retries. Using the shortest result obtained for each.")
-
+            f"after {MAX_RETRIES} retries. Force-truncating to {FORCE_CAP} hops.")
+        for i in still_over:
+            all_sub_questions[i] = all_sub_questions[i][:FORCE_CAP]
+            
     # effective_max_hops: the true maximum hop count across all samples after retries.
     # This drives the QA loop — using args.max_hops here would silently truncate
     # samples whose planner could not be reduced below the limit.

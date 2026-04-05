@@ -9,7 +9,7 @@ from torch.optim import Adam, AdamW
 from collections import namedtuple
 from rl.bert_predictor import EmbedderWithAbsoluteEncoding
 from envs.utils import custom_pad_sequence, stack_memory, stack_text_list
-from ..q_module_jh import TextQNet, TextQNetPolicy, TextRandomPolicy, ActionEmbedTarget, TextMaxQNet, TextVNet, DecomInnerProd, PMMMat, GenIn
+from ..q_module_jh import TextQNet, TextQNetPolicy, TextRandomPolicy, ActionEmbedTarget, TextMaxQNet, TextVNet, DecomInnerProd, PMMMat, GenIn, DecorAEmbed
 from envs.utils import TextMemory, TextMemoryItem
 import copy
 from omegaconf import DictConfig, OmegaConf
@@ -52,9 +52,10 @@ class PQN(object):
         state_embed_copy = copy.deepcopy(state_embed)
         
         # self.decom_inner_prod = DecomInnerProd(keep_orig=True)
-        self.decom_inner_prod = PMMMat()
+        # self.decom_inner_prod = PMMMat()
         # self.decom_inner_prod = GenIn()
         # self.decom_inner_prod = AsymPMMMat()
+        self.decom_inner_prod = DecorAEmbed()
         self.dip_optim = instantiate(config.pqn.optimizer, params=self.decom_inner_prod.parameters())
         self.dip_scheduler = instantiate(config.pqn.scheduler, optimizer=self.dip_optim)
 

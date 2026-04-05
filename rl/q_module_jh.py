@@ -30,6 +30,40 @@ def hard_update(target, source):
     # for target_param, param in zip(target.parameters(), source.parameters()):
     #     target_param.data.copy_(param.data)
 
+# https://arxiv.org/pdf/2412.09169
+class DecorAEmbed(nn.Module):
+    def __init__(self, ):
+        super().__init__()
+        self.alpha = nn.Parameter(torch.ones(1))
+        # self.prelin = nn.Linear(embed_dim, n_decom_q * embed_dim)
+        # self.decom = nn.MultiheadAttention(embed_dim=embed_dim, num_heads=num_heads, batch_first=True)
+        # # self.decom
+        # self.decom_q = nn.Parameter(torch.randn(1, n_decom_q, embed_dim) * 0.02)
+        # self.keep_orig = keep_orig
+
+    def forward(self, s_embed, a_embed, together=False):
+        # print("In", s_embed.shape, a_embed.shape)
+        logits_shape = a_embed.shape[:-1]
+        if s_embed.dim() == 3: s_embed = s_embed.view(-1, s_embed.shape[-1])
+        # print("reshape", s_embed.shape, a_embed.shape, "logit_shape", logits_shape)
+
+        # s_embed = s_embed.unsqueeze(1)
+        # a_embed = a_embed.unsqueeze(1)
+
+        a_embed_v0 = torch.linalg.svd(a_embed)[2]#[..., [0], :]
+        a_embed = a_embed * 2 - self.alpha * a_embed @ a_embed_v0.transpose(-2, -1) @ a_embed_v0
+
+        if a_embed.dim() == 3: a_embed = a_embed.view(-1, a_embed.shape[-1])
+
+        if together:
+            return (s_embed * a_embed).sum(-1).reshape(logits_shape)
+        else:
+            D = s_embed.shape[-1] // 2
+            logits_1 = (s_embed[:, :D] * a_embed[:, :D]).sum(-1).reshape(logits_shape)
+            logits_2 = (s_embed[:, D:] * a_embed[:, D:]).sum(-1).reshape(logits_shape)
+
+            return logits_1, logits_2 
+
 class DecomInnerProd(nn.Module):
     def __init__(self, n_decom_q=8, embed_dim=1024, num_heads=8, keep_orig=False):
         super().__init__()
