@@ -917,8 +917,23 @@ def grpo_loss_civ(
         raw_adv = 0.0
 
     advantages = []
+    # —— verdict-balanced weighting —————————————
+    n_accept = sum(1 for v in verdicts if v == "ACCEPT")
+    n_reject = sum(1 for v in verdicts if v == "REJECT")
+    per_sample_weight = []
+
     for v in verdicts:
-        advantages.append(raw_adv if v == "ACCEPT" else -raw_adv)
+        if v == "ACCEPT" and n_accept > 0:
+            per_sample_weight.append(1.0 / n_accept)
+        elif v == "REJECT" and n_reject > 0:
+            per_sample_weight.append(1.0 / n_reject)
+        else:
+            per_sample_weight.append(1.0)
+
+    w_sum = sum(per_sample_weight)
+    if w_sum > 0:
+        factor = len(verdicts) / w_sum
+        per_sample_weight = [w * factor for w in per_sample_weight]
 
     # ── collect valid samples ───────────────────────────────
     valid_response_ids = []
@@ -926,8 +941,9 @@ def grpo_loss_civ(
     valid_guided_prefix_lens = []
     prompt_input_ids = None
     prompt_attention_mask = None
+    valid_weights = []
 
-    for sample, adv in zip(samples, advantages):
+    for sample, adv, w in zip(samples, advantages, per_sample_weight):
         response_ids = sample["response_ids"]
         if response_ids.numel() == 0:
             continue
@@ -937,6 +953,7 @@ def grpo_loss_civ(
         valid_response_ids.append(response_ids)
         valid_advantages.append(adv)
         valid_guided_prefix_lens.append(sample.get("guided_prefix_len", 0))
+        valid_weights.append(w)
 
     if len(valid_response_ids) == 0:
         dummy = None
@@ -974,8 +991,13 @@ def grpo_loss_civ(
     )
     kl = avg_log_probs - ref_avg_log_probs.to(avg_log_probs.device)
     pg_loss = -valid_advantages_t * avg_log_probs
+    valid_weights_t = torch.tensor(
+        valid_weights, dtype=torch.float32, device=critic_device,
+    )
+
     sample_losses = pg_loss + kl_coef * kl
-    return sample_losses.mean()
+    return (sample_losses * valid_weights_t).sum() / valid_weights_t.sum()
+
 
 
 # ─────────────────────────────────────────────────────────────
