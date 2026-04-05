@@ -17,6 +17,8 @@ from vllm import LLM, SamplingParams
 from vllm.config import CompilationConfig
 import sys
 
+from prompts_and_metrics.chunk_filtering import build_chunk_filter
+
 
 parser = argparse.ArgumentParser(description="LLM answering with vLLM")
 parser.add_argument("--retriever_logfile", type=str, required=True,
@@ -28,10 +30,24 @@ parser.add_argument("--output_file_path", type=str, default=None,
 parser.add_argument("--max_tokens", type=int, default=4000, help="Max tokens to generate")
 parser.add_argument('--gpu_util', type=float, default=0.95, help="Max gpu memory utilization. Default: 0.3")
 parser.add_argument('--think', action="store_true", default=True, help='enable_thinking for Qwen3 models.')
+parser.add_argument('--chunk_filter', choices=["early_stop", 'none', 'llm', 'gt', 'no_noise', 'qvalue', 'retrieval_step'], default='none',
+                    help=("Filtering mode for the retrieved chunks. "
+                          "Used for debugging and ablation studies of the Answering LLM."))
+parser.add_argument('--stopping_threshold', type=float, default=float('-inf'),
+                    help="Remove all chunks selected after Q-value drops below this threshold. Works only with chunk_filter='qvalue'.")
+parser.add_argument('--max_retrieval_steps', type=int, default=1,
+                    help="Maximum number of chunks to use. Works only with chunk_filter='retrieval_step'.")
 args = parser.parse_args()
 
-file_path = args.file_path
-model_name = args.model_name
+filter_kwargs = dict()
+if args.chunk_filter == 'qvalue':
+    filter_kwargs['stopping_threshold'] = args.stopping_threshold
+elif args.chunk_filter == 'retrieval_step':
+    filter_kwargs['max_steps'] = args.max_retrieval_steps
+chunk_filter = build_chunk_filter(args.chunk_filter, **filter_kwargs)
+
+file_path = args.retriever_logfile
+model_name = args.llm_name
 if args.output_file_path:
     output_file_path = args.output_file_path
 else:
@@ -41,6 +57,7 @@ else:
 print(f"Input: {file_path}")
 print(f"Output: {output_file_path}")
 print(f"Model: {model_name}")
+print(f"Chunk filter: {args.chunk_filter}")
 
 
 
@@ -183,12 +200,13 @@ all_em_scores = []
 all_f1_scores = []
 
 all_prompts = []
+all_filtered = []
 for data in tqdm(dataset, desc="Preparing prompts"):
     question = data['question']
-    try:
-        context = "\n\n---\n\n".join(data['pred_texts'])
-    except (KeyError, TypeError):
-        context = "\n\n---\n\n".join(data['pred_text'])
+    filtered_chunks = chunk_filter(data)
+    all_filtered.append(filtered_chunks)
+    filter_texts = filtered_chunks["filtered_texts"]
+    context = "\n\n---\n\n".join(filter_texts)
     full_prompt_for_model = qa_prompt.format(context=context, question=question)
 
     messages = [
@@ -230,7 +248,7 @@ all_em_scores = []
 all_f1_scores = []
 
 
-for i, (data, output) in enumerate(tqdm(zip(dataset, outputs), total=len(dataset), desc="Processing results")):
+for i, (data, output, filt) in enumerate(tqdm(zip(dataset, outputs, all_filtered), total=len(dataset), desc="Processing results")):
     question = data['question']
     ground_truth_answer = data['answer']
 
@@ -252,6 +270,8 @@ for i, (data, output) in enumerate(tqdm(zip(dataset, outputs), total=len(dataset
         "question": question,
         "retrieved_chunks_idx": data['pred_idx'],
         'ground_truth_chunks_idx': data["sf_idx"],
+        "filter_idx": filt["filtered_idx"],
+        "filter_texts": filt["filtered_texts"],
         "ground_truth": ground_truth_answer,
         "prediction": llm_prediction,
         "full_model_output": decoded_output,
