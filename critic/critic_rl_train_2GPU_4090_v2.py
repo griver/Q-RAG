@@ -917,11 +917,16 @@ def grpo_loss_civ(
         raw_adv = 0.0
 
     advantages = []
-    # —— verdict-balanced weighting —————————————
+    for v in verdicts:
+        advantages.append(raw_adv if v == "ACCEPT" else -raw_adv)
+
+    # ── verdict-balanced weighting ─────────────────────────
+    # Without this, 7 ACCEPT vs 1 REJECT means the REJECT gradient
+    # signal is drowned out.  We give each verdict TYPE equal total
+    # weight: w_k = 1/count(verdict_k), then normalise so Σw = N.
     n_accept = sum(1 for v in verdicts if v == "ACCEPT")
     n_reject = sum(1 for v in verdicts if v == "REJECT")
     per_sample_weight = []
-
     for v in verdicts:
         if v == "ACCEPT" and n_accept > 0:
             per_sample_weight.append(1.0 / n_accept)
@@ -929,7 +934,7 @@ def grpo_loss_civ(
             per_sample_weight.append(1.0 / n_reject)
         else:
             per_sample_weight.append(1.0)
-
+    # normalise so weights sum to len(verdicts)
     w_sum = sum(per_sample_weight)
     if w_sum > 0:
         factor = len(verdicts) / w_sum
@@ -939,9 +944,9 @@ def grpo_loss_civ(
     valid_response_ids = []
     valid_advantages = []
     valid_guided_prefix_lens = []
+    valid_weights = []
     prompt_input_ids = None
     prompt_attention_mask = None
-    valid_weights = []
 
     for sample, adv, w in zip(samples, advantages, per_sample_weight):
         response_ids = sample["response_ids"]
@@ -989,15 +994,14 @@ def grpo_loss_civ(
     valid_advantages_t = torch.tensor(
         valid_advantages, dtype=torch.float32, device=critic_device,
     )
-    kl = avg_log_probs - ref_avg_log_probs.to(avg_log_probs.device)
-    pg_loss = -valid_advantages_t * avg_log_probs
     valid_weights_t = torch.tensor(
         valid_weights, dtype=torch.float32, device=critic_device,
     )
-
+    kl = avg_log_probs - ref_avg_log_probs.to(avg_log_probs.device)
+    pg_loss = -valid_advantages_t * avg_log_probs
     sample_losses = pg_loss + kl_coef * kl
+    # weighted mean: gives ACCEPT and REJECT equal total influence
     return (sample_losses * valid_weights_t).sum() / valid_weights_t.sum()
-
 
 
 # ─────────────────────────────────────────────────────────────
