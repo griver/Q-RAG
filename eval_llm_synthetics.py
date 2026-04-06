@@ -68,15 +68,15 @@ def main():
     parser.add_argument("--max_tokens", type=int, default=32, help="Max tokens to generate")
     parser.add_argument('--gpu_util', type=float, default=0.3, help="Max gpu memory utilization. Default: 0.3")
     parser.add_argument('--think', action="store_true", default=False, help='enable_thinking for Qwen3 models.')
-    parser.add_argument('--chunk_filter', choices=["early_stop", 'none', 'llm', 'gt', 'no_noise', 'qvalue', 'retrieval_step'], default='none',
+    parser.add_argument('--chunk_filter', choices=["early_stop", 'none', 'llm', 'gt', 'no_noise', 'qvalue', 'retrieval_budget'], default='none',
                         help = ("Filtering mode for the retrieved chunks. "
                                 "Used for debugging and ablation studies of the Answering LLM."))
 
     parser.add_argument('--stopping_threshold',  type=float, default=float('-inf'),
                         help="Remove all chunks selected after Q-value drops below this threshold. Works only with chink_filter='qvalue'.")
 
-    parser.add_argument('--max_retrieval_steps', type=int, default=1,
-                        help="Maximum number of chunks to use. Works only with chunk_filter='retrieval_step'.")
+    parser.add_argument('--max_retreival_budget', type=int, default=1,
+                        help="Maximum number of chunks to use. Works only with chunk_filter='retrieval_budget'.")
 
     # filter_mode controls post-processing of chunks selected by the retriever:
     # early_stop: remove all chunks that come after the point where all support facts are found
