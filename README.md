@@ -285,6 +285,7 @@ Download RULER data and set default paths are set in `configs/envs/niah.yaml` or
 #### Training RULER-NIAH
 
 ```bash
+CUDA_VISIBLE_DEVICES=0 python train_q_rag.py envs=niah 
 
 ```
 
@@ -293,13 +294,21 @@ Download RULER data and set default paths are set in `configs/envs/niah.yaml` or
 **Retriever evaluation:**
 
 ```bash
-
+CUDA_VISIBLE_DEVICES=0 python eval_retriever.py \
+  pretrained_path="your/path/to/model" \
+  num_samples=1000 \
+  seed=42 \
+  use_last=True
 ```
 
 **LLM evaluation:**
 
 ```bash
-
+CUDA_VISIBLE_DEVICES=0 python eval_llm_synthetics.py \
+  your/path/to/retriever_log.jsonl \
+  --llm_name "Qwen/Qwen3-4B" \
+  --babi_task "niahmv" \
+  --max_tokens 512
 ```
 
 #### Evaluation RULER-QA
