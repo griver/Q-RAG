@@ -207,14 +207,8 @@ python eval_llm_openqa.py \
 
 Download BabiLong data and set default paths are set in `configs/envs/babilong.yaml`.
 
-**Chunking pipeline:** In BabiLong, **each chunk is a single sentence** (not a fixed-size text block). The pipeline works as follows:
-
-1. **`TaskDataset`** parses bAbI task files → extracts `facts` (sentence-level), `question`, `answer`, and `references_idx` (indices of supporting facts).
-2. **`RetrSentenceSampler`** samples random sentences from PG19 books as **noise**.
-3. **`RetrievalBabiLong`** assembles the final chunk list:
-   - `num_noise = num_chunks − num_facts`
-   - `shuffle(noise, facts)` — inserts facts at random positions among noise, **preserving the relative order of facts**.
-4. **`QADatasetAdapter`** passes the pre-built `sample['chunks']` directly (no additional splitting).
+We use standart BabiLong pipline with pre-prepared samples from PG19 books as **noise**.
+This dataset you can download from [🤗 Hugging Face](https://huggingface.co/Q-RAG) or [Google Drive](https://drive.google.com/drive/folders/1UUIx-6vEBF9Mij81iVgPul86aXhdyxhG)
 
 The total number of chunks is controlled by the `num_chunks` / `num_sentences` parameter. The agent's task is to find the supporting facts among all chunks.
 
