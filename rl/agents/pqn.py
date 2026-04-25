@@ -300,9 +300,3 @@ class PQNActor:
         action, _, q_values  = self.agent.select_action_batch(s_par, embeds_pt, embeds_target_pt, random=is_random)
         
         return action, q_values
-            
-        
-
-
-
-
