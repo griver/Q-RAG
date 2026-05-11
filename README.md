@@ -378,7 +378,7 @@ If you find Q-RAG useful, please cite our paper:
 ```bibtex
 @inproceedings{sorokin2026qrag,
   title     = {{Q-RAG}: Long Context Multi-Step Retrieval via Value-Based Embedder Training},
-  author    = {Sorokin, Artyom and Buzun, Nazar and Anokhin, Alexander and Inozemcev, Oleg and Vedernikov, Egor and Anokhin, Petr and Burtsev, Mikhail and Trushkov, Alexey and Yin, Wenshuai and Burnaev, Evgeny},
+  author    = {Sorokin, Artyom and Buzun, Nazar and Anokhin, Alexander and Vedernikov, Egor and Anokhin, Petr and Burtsev, Mikhail and Burnaev, Evgeny},
   booktitle = {Proceedings of the International Conference on Learning Representations (ICLR)},
   year      = {2026}
 }
