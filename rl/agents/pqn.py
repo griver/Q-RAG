@@ -24,6 +24,60 @@ def policy_apply(policy, v_net, state, a_embeds,  a_embeds_target, alpha, return
     return action, q_values, q_values_target
 
 
+@torch.no_grad()
+def compute_returns(rewards, values_next, not_done, gamma=0.99, lambda_coef=.0):
+    """
+        Compute finite-horizon TD(lambda) / lambda-return targets for a batch of rollouts.
+
+        Args:
+            rewards: Tensor of shape [num_envs, num_steps].
+                Immediate rewards r_t for each environment and rollout step.
+
+            values_next: Tensor of shape [num_envs, num_steps].
+                Bootstrap value estimates for the next states, V(s_{t+1}), for each
+                transition. For Q-learning/PQN this is typically max_a Q_target(s_{t+1}, a),
+                or the corresponding Double-Q target estimate.
+
+            not_done: Tensor of shape [num_envs, num_steps].
+                Binary mask for episode continuation after each transition.
+                Should be 1 when the transition can bootstrap from the next state and
+                0 when the transition ends the episode and no future value should be used.
+
+            gamma: float.
+                Discount factor.
+
+            lambda_coef: float.
+                TD(lambda) coefficient. lambda_coef=0 gives one-step TD targets;
+                lambda_coef=1 gives Monte Carlo-style returns over the collected rollout,
+                with bootstrap from values_next at the final rollout step.
+
+        Returns:
+            Tensor of shape [num_envs, num_steps].
+            Lambda-return targets G_t^lambda computed backwards according to:
+
+                G^{λ}_t =r_t + not_done * γ ( (1. - λ) * V(s_{t+1}) + λ * G^λ_{t+1})
+
+            For the final collected transition, the recursion is truncated as:
+
+                G^{λ}_t = r_t + not_done * γ * V(s_{t+1})
+    """
+
+    num_envs, num_steps = rewards.shape
+    # variable for λ-returns G^{λ}_t:
+    returns = rewards.new_empty(num_envs, num_steps)
+
+    for i in reversed(range(num_steps)):
+        if i == num_steps - 1:
+            # at final rollout step we have only V(s_{t+1}) estimates and no future rewards
+            # therefore: G^{λ}_t = r_t + not_done * γ * V(s_{t+1})
+            value_target = (gamma * values_next[:, i])
+        else:
+            # G^{λ}_t =r_t + not_done * γ ( (1. - λ) * V(s_{t+1}) + λ * G^λ_{t+1})
+            value_target = gamma * ((1. - lambda_coef) * values_next[:, i] + lambda_coef * returns[:, i + 1])
+        returns[:, i] = rewards[:, i] + not_done[:, i] * value_target
+
+    return returns
+
 class PQN(object):
 
     def __init__(self, config: DictConfig):
@@ -122,64 +176,137 @@ class PQN(object):
         return action.item(), q_values, q_values_target
         
     
-    @torch.no_grad()
-    def _get_target(self, lambda_returns, next_q, q_values, rewards, dones_mask):
-        target_bootstrap = (
-            rewards + self.gamma * dones_mask * next_q
-        )
-        delta = lambda_returns - next_q
-        lambda_returns = (
-            target_bootstrap + self.gamma * self.Lambda * delta
-        )
-        lambda_returns = dones_mask * lambda_returns + (1.0 - dones_mask) * rewards
-        next_q = q_values
+    # @torch.no_grad()
+    # def _get_target(self, lambda_returns, next_q, q_values, rewards, dones_mask):
+    #     target_bootstrap = (
+    #         rewards + self.gamma * dones_mask * next_q
+    #     )
+    #     delta = lambda_returns - next_q
+    #     lambda_returns = (
+    #         target_bootstrap + self.gamma * self.Lambda * delta
+    #     )
+    #     lambda_returns = dones_mask * lambda_returns + (1.0 - dones_mask) * rewards
+    #     next_q = q_values
+    #
+    #     return lambda_returns, next_q
 
-        return lambda_returns, next_q
+
+    # def update_old(self,
+    #             state_batch: TextMemory,
+    #             action_batch: TextMemoryItem,
+    #             next_state_batch: TextMemory,
+    #             q_values_batch: Tensor,
+    #             reward_batch: Tensor,
+    #             mask_batch: Tensor):
+    #
+    #
+    #     last_q = mask_batch[:, -2] * q_values_batch[:, -1]
+    #     lambda_returns = reward_batch[:, -2] + self.gamma * last_q
+    #
+    #     targets = [lambda_returns]
+    #
+    #     for t in range(q_values_batch.shape[1] - 3, -1, -1):
+    #         lambda_returns, last_q = self._get_target(lambda_returns, last_q, q_values_batch[:, t], reward_batch[:, t], mask_batch[:, t])
+    #         targets.append(lambda_returns)
+    #
+    #     targets.reverse()
+    #     targets = torch.stack(targets, dim=1)
+    #     assert targets.shape[0] == q_values_batch.shape[0]
+    #     assert targets.shape[1] == q_values_batch.shape[1] - 1
+    #     targets = targets.reshape(-1)
+    #
+    #     state_batch = TextMemory(
+    #             item_ids=None,
+    #             available_ids=None,
+    #             available_mask=state_batch.available_mask,
+    #             text=None,
+    #             input_ids=state_batch.input_ids,
+    #             attention_mask=state_batch.attention_mask
+    #         )
+    #
+    #     action_batch = TextMemoryItem(
+    #         index=None,
+    #         position=torch.tensor(action_batch.position, device=action_batch.input_ids.device, dtype=torch.float32),
+    #         input_ids=action_batch.input_ids,
+    #         attention_mask=action_batch.attention_mask,
+    #         text=None
+    #     )
+    #
+    #     qf_loss = self.train_step(self.critic, state_batch, action_batch, targets) #computes backward inside
+    #
+    #     self._update_step += 1
+    #     if self._update_step % self.accumulate_grads == 0:
+    #         torch.nn.utils.clip_grad_norm_(self.critic.parameters(), self.max_grad_norm)
+    #         self.critic_optim.step()
+    #         self.scheduler.step()
+    #         self.critic_optim.zero_grad()
+    #
+    #         self.alpha = self.alpha_start * float(self.scheduler.get_lr()[0]) / self.start_lr
+    #         self.v_net_target.update(self.critic, self.tau)
+    #         self.action_embed_target.update(self.critic, self.tau)
+    #         self.policy.update(self.critic)
+    #
+    #     return qf_loss.item()
 
 
-    def update(self, 
-                state_batch: TextMemory, 
-                action_batch: TextMemoryItem, 
-                next_state_batch: TextMemory, 
-                q_values_batch: Tensor,
-                reward_batch: Tensor, 
-                mask_batch: Tensor):
-        
-        
-        last_q = mask_batch[:, -2] * q_values_batch[:, -1]
-        lambda_returns = reward_batch[:, -2] + self.gamma * last_q
+    def update(
+            self,
+            state_batch: TextMemory,
+            action_batch: TextMemoryItem,
+            next_state_batch: TextMemory,
+            q_values_batch: Tensor,
+            reward_batch: Tensor,
+            mask_batch: Tensor):
 
-        targets = [lambda_returns]
+        state_values = q_values_batch
+        rewards = reward_batch
+        not_done = mask_batch.to(dtype=rewards.dtype)
 
-        for t in range(q_values_batch.shape[1] - 3, -1, -1):
-            lambda_returns, last_q = self._get_target(lambda_returns, last_q, q_values_batch[:, t], reward_batch[:, t], mask_batch[:, t])
-            targets.append(lambda_returns)
+        if rewards.ndim != 2:
+            raise ValueError(f"reward_batch must be 2-D, got shape {tuple(rewards.shape)}")
 
-        targets.reverse()
-        targets = torch.stack(targets, dim=1)
-        assert targets.shape[0] == q_values_batch.shape[0]
-        assert targets.shape[1] == q_values_batch.shape[1] - 1
-        targets = targets.reshape(-1)
+        num_envs, num_steps = rewards.shape
 
-        state_batch = TextMemory(
-                item_ids=None,
-                available_ids=None,
-                available_mask=state_batch.available_mask,
-                text=None,
-                input_ids=state_batch.input_ids,
-                attention_mask=state_batch.attention_mask
+        if not_done.shape != rewards.shape:
+            raise ValueError(
+                f"mask_batch shape {tuple(not_done.shape)} must match "
+                f"reward_batch shape {tuple(rewards.shape)}"
             )
-        
-        action_batch = TextMemoryItem(
+
+        if state_values.shape != (num_envs, num_steps + 1):
+            raise ValueError(
+                f"q_values_batch must have shape [num_envs, num_steps + 1]. "
+                f"Got {tuple(state_values.shape)}, expected {(num_envs, num_steps + 1)}"
+            )
+
+        returns = compute_returns(rewards, state_values[:,1:], not_done, self.gamma, self.Lambda)
+        flat_targets = returns.reshape(-1)
+
+        # next_state_batch is not needed here: rollout has already stored
+        # the target-network state values in q_values_batch.
+        critic_states = TextMemory(
+            item_ids=None,
+            available_ids=None,
+            available_mask=state_batch.available_mask,
+            text=None,
+            input_ids=state_batch.input_ids,
+            attention_mask=state_batch.attention_mask,
+        )
+
+        critic_actions = TextMemoryItem(
             index=None,
-            position=torch.tensor(action_batch.position, device=action_batch.input_ids.device, dtype=torch.float32), 
+            position=torch.as_tensor(
+                action_batch.position,
+                device=action_batch.input_ids.device,
+                dtype=torch.float32,
+            ),
             input_ids=action_batch.input_ids,
             attention_mask=action_batch.attention_mask,
-            text=None
+            text=None,
         )
-        
-        qf_loss = self.train_step(self.critic, state_batch, action_batch, targets) #computes backward inside
-        
+
+        qf_loss = self.train_step(self.critic, critic_states, critic_actions, flat_targets)
+
         self._update_step += 1
         if self._update_step % self.accumulate_grads == 0:
             torch.nn.utils.clip_grad_norm_(self.critic.parameters(), self.max_grad_norm)
@@ -193,7 +320,7 @@ class PQN(object):
             self.policy.update(self.critic)
 
         return qf_loss.item()
-    
+
     def train(self):
         self.policy.train()
         self.critic.train()

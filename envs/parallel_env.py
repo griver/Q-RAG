@@ -122,12 +122,12 @@ class ParallelTextEnv:
         # print("a", len(a_seq), "r", [len(ri) for ri in r_seq])
 
         return new_state_seq, new_returns, TrainBatch(
-            state=s_stack,
-            q_values=torch.FloatTensor(q_seq).to(torch.get_default_device()),
-            action=a_stack,
-            reward=torch.FloatTensor(r_seq).to(torch.get_default_device()),
-            next_state=next_s_stack,
-            not_done=torch.IntTensor(not_dones_seq).to(torch.get_default_device()),
+            state=s_stack, #s_t for t in [0, num_steps-1]
+            q_values=torch.FloatTensor(q_seq).to(torch.get_default_device()), #q(s_t,a_t) t in [0, num_steps]
+            action=a_stack, #a_t t in [0, num_steps-1]
+            reward=torch.FloatTensor(r_seq).to(torch.get_default_device()), #r_t t in [0, num_steps-1]
+            next_state=next_s_stack, #s_{t+1} t in [0, num_steps-1]
+            not_done=torch.IntTensor(not_dones_seq).to(torch.get_default_device()), #for t in [0, num_steps-1]
         )
 
     def rollout_old(self, n, cur_s_seq, agent, random):
