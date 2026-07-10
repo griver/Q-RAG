@@ -65,6 +65,8 @@ pqn:
     accumulate_grads: ${accumulate_grads}
     action_embed_length: ${max_action_length}
     max_action_length_in_memory: ${max_action_length_in_memory}
+    train_state_embed: true
+    train_action_embed: ${train_action_embed}
 
   optimizer:
     _target_: torch.optim.AdamW

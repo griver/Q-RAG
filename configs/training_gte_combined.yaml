@@ -11,6 +11,7 @@ learning_start: 200
 steps_count: 70_000
 batch_size: 16
 accumulate_grads: 2
+train_action_embed: true
 eval_interval: 100
 eval_episodes: 300
 envs_parallel: 1

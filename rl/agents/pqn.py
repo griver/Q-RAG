@@ -98,15 +98,32 @@ class PQN(object):
         self._update_step = 0  # number of updates from the start of the training
         # self.action_embed_length = config.pqn.hyperparams.action_embed_length
         self.max_action_length_in_memory = config.pqn.hyperparams.max_action_length_in_memory
+        self.train_state_embed = OmegaConf.select(
+            config, "pqn.hyperparams.train_state_embed", default=True
+        )
+        self.train_action_embed = OmegaConf.select(
+            config, "pqn.hyperparams.train_action_embed", default=True
+        )
 
         state_embed: nn.Module = instantiate(config.pqn.state_embed)
         action_embed: nn.Module = instantiate(config.pqn.action_embed)
         state_embed_target: nn.Module = instantiate(config.pqn.state_embed_target)
         action_embed_target: nn.Module = instantiate(config.pqn.action_embed_target)
+        self._set_module_trainable(state_embed, self.train_state_embed)
+        self._set_module_trainable(action_embed, self.train_action_embed)
         state_embed_copy = copy.deepcopy(state_embed)
         
         self.critic = TextQNet(state_embed, action_embed).to(torch.get_default_device())
-        self.critic_optim = instantiate(config.pqn.optimizer, params=self.critic.parameters())
+        self.critic_trainable_params = [
+            p for p in self.critic.parameters() if p.requires_grad
+        ]
+        if not self.critic_trainable_params:
+            raise ValueError(
+                "At least one PQN embedder must be trainable. "
+                "Set pqn.hyperparams.train_state_embed or "
+                "pqn.hyperparams.train_action_embed to true."
+            )
+        self.critic_optim = instantiate(config.pqn.optimizer, params=self.critic_trainable_params)
         self.scheduler = instantiate(config.pqn.scheduler, optimizer=self.critic_optim)
        
         self.policy = TextQNetPolicy(state_embed_copy, self.critic).to(torch.get_default_device())
@@ -114,11 +131,30 @@ class PQN(object):
 
         self.v_net_target = TextVNet(state_embed_target, self.critic).to(torch.get_default_device())
         self.action_embed_target = ActionEmbedTarget(action_embed_target, self.critic).to(torch.get_default_device())
+        self._apply_frozen_eval_modes()
 
         self.state_tokenizer = state_embed.tokenizer
         self.action_tokenizer = action_embed.tokenizer
 
         self.train_step = self.make_train_step()
+
+
+    @staticmethod
+    def _set_module_trainable(module: nn.Module, trainable: bool) -> None:
+        for param in module.parameters():
+            param.requires_grad_(trainable)
+        if not trainable:
+            module.eval()
+
+
+    def _apply_frozen_eval_modes(self) -> None:
+        if not self.train_state_embed:
+            self.critic.state_embed.eval()
+            self.policy.state_embed.eval()
+            self.v_net_target.state_embed.eval()
+        if not self.train_action_embed:
+            self.critic.action_embed.eval()
+            self.action_embed_target.eval()
 
 
     def make_train_step(self):
@@ -309,25 +345,29 @@ class PQN(object):
 
         self._update_step += 1
         if self._update_step % self.accumulate_grads == 0:
-            torch.nn.utils.clip_grad_norm_(self.critic.parameters(), self.max_grad_norm)
+            torch.nn.utils.clip_grad_norm_(self.critic_trainable_params, self.max_grad_norm)
             self.critic_optim.step()
             self.scheduler.step()
             self.critic_optim.zero_grad()
 
             self.alpha = self.alpha_start * float(self.scheduler.get_lr()[0]) / self.start_lr
-            self.v_net_target.update(self.critic, self.tau)
-            self.action_embed_target.update(self.critic, self.tau)
-            self.policy.update(self.critic)
+            if self.train_state_embed:
+                self.v_net_target.update(self.critic, self.tau)
+                self.policy.update(self.critic)
+            if self.train_action_embed:
+                self.action_embed_target.update(self.critic, self.tau)
 
         return qf_loss.item()
 
     def train(self):
         self.policy.train()
         self.critic.train()
+        self._apply_frozen_eval_modes()
 
     def eval(self):
         self.policy.eval()
         self.critic.action_embed.eval()
+        self._apply_frozen_eval_modes()
         # self.v_net_target.train()
         # self.action_embed_target.train()
 
@@ -429,7 +469,5 @@ class PQNActor:
         return action, q_values
             
         
-
-
 
 
