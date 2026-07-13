@@ -1,6 +1,13 @@
+defaults:
+  # Declare the config group without selecting a default environment. This
+  # allows evaluation commands to use `envs=hotpotqa` instead of `+envs=...`.
+  - envs: null
+  - _self_
+
 pretrained_path: "/home/jovyan/nazar/multi-step-retrieval-rl/runs/Dec03_12-03-43_QRAG_qa2_two-supporting-facts"
 num_samples: 1000
 use_last: False
+log_filename: null  # default is derived from task/seed when not specified
 
 #you can also rewrite any parameter from training config in this config:
 seed: 42
@@ -13,7 +20,6 @@ envs:
   # test_env:
   #   feedback_model: ${feedback.feedback_dict.babilong_em}
     
-
 
 
 

@@ -91,6 +91,25 @@ def calc_fact_f1_em(predicted_support_idxs, gt_support_idxs):
     return f1, em
 
 
+def config_group_is_overridden(overrides: List[str], group: str) -> bool:
+    """Return whether a Hydra config group was explicitly selected on CLI."""
+    prefix = f"{group}="
+    return any(override.lstrip("+").startswith(prefix) for override in overrides)
+
+
+def merge_eval_config(train_cfg, eval_cfg, overrides: List[str]):
+    """Merge eval settings, replacing explicitly selected config groups."""
+    cfg = OmegaConf.merge(train_cfg, eval_cfg)
+
+    # A selected evaluation environment is a complete config, not a patch for
+    # the environment used during training. Recursive merging would otherwise
+    # leave stale keys such as dataset1/dataset2 from a combined environment.
+    if config_group_is_overridden(overrides, "envs"):
+        OmegaConf.update(cfg, "envs", eval_cfg.envs, merge=False)
+
+    return cfg
+
+
 @torch.no_grad()
 def evaluate_episode(env: QAEnv, agent: PQN, sample=None) -> dict:
     """Run a single episode on the provided sample and return metrics."""
@@ -146,10 +165,11 @@ def evaluate_episode(env: QAEnv, agent: PQN, sample=None) -> dict:
 
 
 def load_eval_config(name):
+    overrides = sys.argv[1:]
     with initialize(version_base="1.3", config_path="./configs"):
         eval_cfg = compose(
             config_name=name,
-            overrides=sys.argv[1:]
+            overrides=overrides
         )
         # cli_cfg = OmegaConf.from_cli()
         # eval_cfg = OmegaConf.load(name)
@@ -160,7 +180,7 @@ def load_eval_config(name):
         raise FileNotFoundError(f"Could not find config.yaml at {train_cfg_path}")
     train_cfg = OmegaConf.load(train_cfg_path)
     #prepare_eval_config(eval_cfg, train_cfg)
-    cfg = OmegaConf.merge(train_cfg, eval_cfg)
+    cfg = merge_eval_config(train_cfg, eval_cfg, overrides)
     OmegaConf.resolve(cfg)
     return cfg, train_cfg
 
@@ -200,7 +220,9 @@ def main(argv: List[str] | None = None) -> None:
     # -----------------------------------------------------------------------
     # Evaluate with logging
     # -----------------------------------------------------------------------
-    if cfg.envs.task not in ['hotpotqa', 'musique']:
+    if cfg.log_filename is not None:
+        log_name = cfg.log_filename
+    elif cfg.envs.task not in ['hotpotqa', 'musique']:
         log_name = f"eval_seed{cfg.seed}_ns{cfg.envs.num_sentences}.jsonl"
     else:
         log_name = f"eval_seed{cfg.seed}.jsonl"
