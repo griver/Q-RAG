@@ -91,17 +91,22 @@ class ActionEmbedTarget(nn.Module):
 class TextQNetPolicy(nn.Module):
     state_embed: nn.Module
 
-    def __init__(self, state_embed: nn.Module, q_net: TextQNet, top_k_actions=5) -> None:
+    def __init__(self, state_embed: nn.Module, q_net: TextQNet = None, top_k_actions=5) -> None:
         super().__init__()
         self.state_embed = state_embed
-        self.state_embed.load_state_dict({
-            k: v.clone() for k, v in q_net.state_embed.state_dict().items()
-        })
+        # q_net is optional so an online policy can share the critic's state
+        # embedder. Other agents can still pass a distinct embedder and use the
+        # original snapshot/update behaviour.
+        if q_net is not None and self.state_embed is not q_net.state_embed:
+            self.state_embed.load_state_dict({
+                k: v.clone() for k, v in q_net.state_embed.state_dict().items()
+            })
         self.top_k_actions = top_k_actions
 
     @torch.no_grad()
     def update(self, q_net: TextQNet):
-        hard_update(self.state_embed, q_net.state_embed)
+        if self.state_embed is not q_net.state_embed:
+            hard_update(self.state_embed, q_net.state_embed)
 
     @torch.no_grad()
     def forward(self, s: TextMemory, a_embeds: Tensor, alpha: float, return_arg_max=False):
@@ -236,4 +241,3 @@ class TextMaxQNet(nn.Module):
 
         return (logits_1.max(-1).values, 
                 logits_2.max(-1).values)
-

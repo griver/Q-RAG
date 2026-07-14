@@ -111,7 +111,6 @@ class PQN(object):
         action_embed_target: nn.Module = instantiate(config.pqn.action_embed_target)
         self._set_module_trainable(state_embed, self.train_state_embed)
         self._set_module_trainable(action_embed, self.train_action_embed)
-        state_embed_copy = copy.deepcopy(state_embed)
         
         self.critic = TextQNet(state_embed, action_embed).to(torch.get_default_device())
         self.critic_trainable_params = [
@@ -126,7 +125,9 @@ class PQN(object):
         self.critic_optim = instantiate(config.pqn.optimizer, params=self.critic_trainable_params)
         self.scheduler = instantiate(config.pqn.scheduler, optimizer=self.critic_optim)
        
-        self.policy = TextQNetPolicy(state_embed_copy, self.critic).to(torch.get_default_device())
+        # The policy represents the online critic, so it uses the very same state
+        # embedder instead of keeping an eagerly synchronized duplicate of it.
+        self.policy = TextQNetPolicy(state_embed)
         self.random_policy = TextRandomPolicy().to(torch.get_default_device())
 
         self.v_net_target = TextVNet(state_embed_target, self.critic).to(torch.get_default_device())
@@ -280,7 +281,6 @@ class PQN(object):
     #         self.alpha = self.alpha_start * float(self.scheduler.get_lr()[0]) / self.start_lr
     #         self.v_net_target.update(self.critic, self.tau)
     #         self.action_embed_target.update(self.critic, self.tau)
-    #         self.policy.update(self.critic)
     #
     #     return qf_loss.item()
 
@@ -353,7 +353,6 @@ class PQN(object):
             self.alpha = self.alpha_start * float(self.scheduler.get_lr()[0]) / self.start_lr
             if self.train_state_embed:
                 self.v_net_target.update(self.critic, self.tau)
-                self.policy.update(self.critic)
             if self.train_action_embed:
                 self.action_embed_target.update(self.critic, self.tau)
 
@@ -380,7 +379,6 @@ class PQN(object):
 
         checkpoint = {
             "critic": self.critic.state_dict(),
-            "policy": self.policy.state_dict(),
             "random_policy": self.random_policy.state_dict(),
             "v_net_target": self.v_net_target.state_dict(),
             "action_embed_target": self.action_embed_target.state_dict(),
@@ -403,20 +401,22 @@ class PQN(object):
         checkpoint = torch.load(checkpoint_path, map_location=torch.get_default_device(), weights_only=False)
 
         self.critic.load_state_dict(checkpoint["critic"], strict=strict)
-        self.policy.load_state_dict(checkpoint["policy"], strict=strict)
-        # у random_policy обычно нет параметров, но на всякий случай
+        # policy.state_embed is the same module as critic.state_embed. Older
+        # checkpoints may contain a separate policy entry; the critic is now the
+        # single source of truth, so no second load is needed.
+        # random_policy have no parameters right now, but this may change in the future:
         if "random_policy" in checkpoint:
             self.random_policy.load_state_dict(checkpoint["random_policy"], strict=False)
         self.v_net_target.load_state_dict(checkpoint["v_net_target"], strict=strict)
         self.action_embed_target.load_state_dict(checkpoint["action_embed_target"], strict=strict)
 
-        # при наличии — восстанавливаем оптимизатор и scheduler
+        # restore scheduler
         if "critic_optim" in checkpoint:
             self.critic_optim.load_state_dict(checkpoint["critic_optim"])
         if "scheduler" in checkpoint:
             self.scheduler.load_state_dict(checkpoint["scheduler"])
 
-        # восстанавливаем значение α, если оно было сохранено
+        # restore α, which may have changed during training
         self.alpha = checkpoint.get("alpha", self.alpha)
 
         print(f"[INFO] PQN checkpoint loaded  ← {checkpoint_path}")
@@ -469,5 +469,3 @@ class PQNActor:
         return action, q_values
             
         
-
-
