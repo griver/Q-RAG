@@ -39,7 +39,28 @@ class ParallelTextEnv:
         self.episodic_returns[:] = 0.
         return memory, stack_memory(memory, self.state_tokenizer, max_length=self.max_action_length_in_memory)
     
-    def rollout(self, batch_size, cur_s_seq, agent, random):
+    def rollout(
+            self,
+            batch_size,
+            cur_s_seq,
+            agent,
+            random,
+            online_models_train_mode: bool = True):
+        """Collect a batch of environment transitions.
+
+        Args:
+            batch_size: Minimum total number of transitions to collect.
+            cur_s_seq: Current state for every parallel environment.
+            agent: Agent used to embed actions, estimate values and select actions.
+            random: Whether actions should be replaced with random valid actions.
+            online_models_train_mode: If true, collect with trainable online models
+                in train mode; otherwise use eval mode. Target models always stay
+                in eval mode. Previous online-model modes are restored on exit.
+        """
+        with agent.online_models_mode(training=online_models_train_mode):
+            return self._rollout(batch_size, cur_s_seq, agent, random)
+
+    def _rollout(self, batch_size, cur_s_seq, agent, random):
 
         a_embeds, a_embeds_target = self.get_extra_embeds(agent.critic.action_embed, agent.action_embed_target)
         env_index = list(range(len(self.text_envs)))

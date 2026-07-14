@@ -137,7 +137,13 @@ train_rewards = []
 for it in progress_bar:
     
     agent.train()
-    states_list, rewards, train_batch = parallel_env.rollout(cfg.batch_size, states_list, agent, random=(step < 2 * cfg.learning_start))
+    states_list, rewards, train_batch = parallel_env.rollout(
+        cfg.batch_size,
+        states_list,
+        agent,
+        random=(step < 2 * cfg.learning_start),
+        online_models_train_mode=True,
+    )
     step += train_batch.reward.numel()
     assert train_batch.reward.numel() == np.prod(train_batch.reward.shape)
     train_rewards.extend(rewards)
@@ -181,4 +187,3 @@ for it in progress_bar:
             #print(f"[INFO] New best model saved with reward {best_eval_reward:.3f}")
 
         train_rewards = []
-

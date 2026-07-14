@@ -1,4 +1,5 @@
 from functools import partial
+from contextlib import contextmanager
 import os
 from typing import Tuple
 import torch
@@ -132,7 +133,7 @@ class PQN(object):
 
         self.v_net_target = TextVNet(state_embed_target, self.critic).to(torch.get_default_device())
         self.action_embed_target = ActionEmbedTarget(action_embed_target, self.critic).to(torch.get_default_device())
-        self._apply_frozen_eval_modes()
+        self.train()
 
         self.state_tokenizer = state_embed.tokenizer
         self.action_tokenizer = action_embed.tokenizer
@@ -148,14 +149,53 @@ class PQN(object):
             module.eval()
 
 
-    def _apply_frozen_eval_modes(self) -> None:
+    def _apply_fixed_eval_modes(self) -> None:
+        """Enforce eval mode for modules that must never enter train mode."""
+        self.v_net_target.eval()
+        self.action_embed_target.eval()
+
         if not self.train_state_embed:
+            self.policy.eval()
             self.critic.state_embed.eval()
-            self.policy.state_embed.eval()
-            self.v_net_target.state_embed.eval()
         if not self.train_action_embed:
             self.critic.action_embed.eval()
-            self.action_embed_target.eval()
+
+
+    def _set_online_models_mode(self, training: bool) -> None:
+        """Set trainable online modules to the requested mode.
+
+        Frozen online embedders and all target embedders remain in eval mode.
+        """
+        state_training = training and self.train_state_embed
+        action_training = training and self.train_action_embed
+
+        # TextQNet and TextQNetPolicy do not have mode-dependent layers of their
+        # own, but keeping their flags consistent makes module state unambiguous.
+        self.policy.train(state_training)
+        self.critic.train(state_training or action_training)
+        self.critic.state_embed.train(state_training)
+        self.critic.action_embed.train(action_training)
+        self._apply_fixed_eval_modes()
+
+
+    @contextmanager
+    def online_models_mode(self, training: bool):
+        """Temporarily set online models to train/eval and restore their modes."""
+        modules = list(dict.fromkeys([
+            *self.critic.modules(),
+            *self.policy.modules(),
+        ]))
+        previous_modes = [(module, module.training) for module in modules]
+
+        try:
+            self._set_online_models_mode(training)
+            yield
+        finally:
+            # Assigning the flag directly restores the exact per-module state;
+            # recursive train() calls could overwrite modes of frozen children.
+            for module, previous_mode in previous_modes:
+                module.training = previous_mode
+            self._apply_fixed_eval_modes()
 
 
     def make_train_step(self):
@@ -294,6 +334,10 @@ class PQN(object):
             reward_batch: Tensor,
             mask_batch: Tensor):
 
+        # Rollout collection may temporarily use eval mode. Gradient updates
+        # must always run with trainable online modules in training mode.
+        self.train()
+
         state_values = q_values_batch
         rewards = reward_batch
         not_done = mask_batch.to(dtype=rewards.dtype)
@@ -359,16 +403,10 @@ class PQN(object):
         return qf_loss.item()
 
     def train(self):
-        self.policy.train()
-        self.critic.train()
-        self._apply_frozen_eval_modes()
+        self._set_online_models_mode(training=True)
 
     def eval(self):
-        self.policy.eval()
-        self.critic.action_embed.eval()
-        self._apply_frozen_eval_modes()
-        # self.v_net_target.train()
-        # self.action_embed_target.train()
+        self._set_online_models_mode(training=False)
 
     def save(self, checkpoint_path: str, verbose=False) -> None:
         """
