@@ -343,7 +343,17 @@ class ParallelTextEnv:
             embeds=[t.embeds for t in transitions]
         )
     
-    def rollout(self, n, s_seq, agent, random):
+    def rollout(
+            self,
+            n,
+            s_seq,
+            agent,
+            random,
+            generate_in_eval_mode: bool = False):
+        with agent.online_models_mode(training=not generate_in_eval_mode):
+            return self._rollout(n, s_seq, agent, random)
+
+    def _rollout(self, n, s_seq, agent, random):
 
         a_embeds, a_embeds_target = self.get_extra_embeds(agent.critic.action_embed, agent.action_embed_target)
         env_index = list(range(len(self.text_envs)))

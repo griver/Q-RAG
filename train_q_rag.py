@@ -142,7 +142,9 @@ for it in progress_bar:
         states_list,
         agent,
         random=(step < 2 * cfg.learning_start),
-        online_models_train_mode=True,
+        generate_in_eval_mode=OmegaConf.select(
+            cfg, "generate_in_eval_mode", default=False
+        ),
     )
     step += train_batch.reward.numel()
     assert train_batch.reward.numel() == np.prod(train_batch.reward.shape)
