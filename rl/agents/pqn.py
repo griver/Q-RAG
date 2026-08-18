@@ -236,8 +236,9 @@ class PQN(object):
         action, q_values, q_values_target = policy_apply(self.policy, self.v_net_target, torch_state, a_embeds,  a_embeds_target, torch.tensor(self.alpha), evaluate)
 
         if random:
+            #print('Random action')
             action = self.random_policy.forward(state)
-            
+
         return action.squeeze(), q_values.squeeze(), q_values_target.squeeze()
 
 

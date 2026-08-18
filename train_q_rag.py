@@ -137,6 +137,7 @@ train_rewards = []
 for it in progress_bar:
     
     agent.train()
+    #print('ROLLOUT has started!')
     states_list, rewards, train_batch = parallel_env.rollout(
         cfg.batch_size,
         states_list,
@@ -146,6 +147,7 @@ for it in progress_bar:
             cfg, "generate_in_eval_mode", default=False
         ),
     )
+    #print("ROLLOUT has finished!")
     step += train_batch.reward.numel()
     assert train_batch.reward.numel() == np.prod(train_batch.reward.shape)
     train_rewards.extend(rewards)
@@ -158,8 +160,8 @@ for it in progress_bar:
         train_batch.reward, 
         train_batch.not_done)
     
-    if it % eval_interval == 0:
-
+    if it % eval_interval == 0 and cfg.eval_episodes > 0:
+        #print('Evaluation has started!')
         agent.eval()
         
         writer.add_scalar("train r_sum", np.mean(train_rewards), step)
@@ -189,3 +191,4 @@ for it in progress_bar:
             #print(f"[INFO] New best model saved with reward {best_eval_reward:.3f}")
 
         train_rewards = []
+        #print("Evaluation has finished!")

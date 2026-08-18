@@ -128,6 +128,7 @@ class TextQNetPolicy(nn.Module):
         # print("top_mask", top_mask.shape)
 
         if return_arg_max:
+            #print(f'Action is selected greedy! Weights is in Training mode: {self.state_embed.training}')
             return torch.argmax(logits, -1), logits
 
         probs = ((logits - logits.max(-1, keepdim=True).values) / alpha).softmax(-1)
@@ -139,7 +140,7 @@ class TextQNetPolicy(nn.Module):
         probs = probs / probs.sum(-1, keepdim=True)
         dist = torch.distributions.Categorical(probs = probs)
         action = dist.sample()
-
+        #print(f'Action is sampled! Weights is in Training mode: {self.state_embed.training}')
         # print("action", action.shape)
 
         return action, logits
