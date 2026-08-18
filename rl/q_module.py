@@ -91,7 +91,7 @@ class ActionEmbedTarget(nn.Module):
 class TextQNetPolicy(nn.Module):
     state_embed: nn.Module
 
-    def __init__(self, state_embed: nn.Module, q_net: TextQNet = None, top_k_actions=5) -> None:
+    def __init__(self, state_embed: nn.Module, q_net: TextQNet = None, num_softmax_candidates=5) -> None:
         super().__init__()
         self.state_embed = state_embed
         # q_net is optional so an online policy can share the critic's state
@@ -101,7 +101,7 @@ class TextQNetPolicy(nn.Module):
             self.state_embed.load_state_dict({
                 k: v.clone() for k, v in q_net.state_embed.state_dict().items()
             })
-        self.top_k_actions = top_k_actions
+        self.num_softmax_candidates = num_softmax_candidates
 
     @torch.no_grad()
     def update(self, q_net: TextQNet):
@@ -121,9 +121,9 @@ class TextQNetPolicy(nn.Module):
         # print("logits", logits.shape)
         logits[s.available_mask == False] = logits.min() - 1
 
-        #print('\033[96m'+f'logits: {logits.shape}  topk: {self.top_k_actions}'+"\033[0m")
-        top_k_actions = min(logits.size(1), self.top_k_actions)
-        top_ids = torch.topk(logits, top_k_actions, dim=1).indices
+        #print('\033[96m'+f'logits: {logits.shape}  topk: {self.num_softmax_candidates}'+"\033[0m")
+        num_softmax_candidates = min(logits.size(1), self.num_softmax_candidates)
+        top_ids = torch.topk(logits, num_softmax_candidates, dim=1).indices
         top_mask = torch.zeros_like(logits > 0).scatter_(1, top_ids, True)
         # print("top_mask", top_mask.shape)
 

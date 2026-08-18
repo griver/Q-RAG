@@ -128,7 +128,12 @@ class PQN(object):
        
         # The policy represents the online critic, so it uses the very same state
         # embedder instead of keeping an eagerly synchronized duplicate of it.
-        self.policy = TextQNetPolicy(state_embed)
+        self.policy = TextQNetPolicy(
+            state_embed,
+            num_softmax_candidates=OmegaConf.select(
+                config, "pqn.hyperparams.num_softmax_candidates", default=5
+            ),
+        )
         self.random_policy = TextRandomPolicy().to(torch.get_default_device())
 
         self.v_net_target = TextVNet(state_embed_target, self.critic).to(torch.get_default_device())
